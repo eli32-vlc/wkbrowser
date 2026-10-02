@@ -4,6 +4,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+mkdir -p log
 UPDATE=""
 [ "${1:-}" = "--update" ] && { UPDATE="--update"; shift; }
 

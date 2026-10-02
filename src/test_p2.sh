@@ -4,6 +4,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+mkdir -p log
 PORT=${PORT:-8177}
 FAIL=0
 
