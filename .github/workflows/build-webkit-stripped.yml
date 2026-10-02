@@ -63,7 +63,7 @@ jobs:
         with:
           path: |
             build/ccache
-            build/GTK
+            src/WebKit/WebKitBuild
           key: webkit-stripped-${{ hashFiles('.github/workflows/build-webkit-stripped.yml') }}
           restore-keys: webkit-stripped-
 
@@ -119,19 +119,22 @@ jobs:
 
       - name: Build
         run: |
+          set -o pipefail
           cd src/WebKit
           export CCACHE_DIR=${{ github.workspace }}/build/ccache
+          # build-webkit configures in-tree at WebKitBuild/<port>/<config>.
+          # WEBKIT_OUTPUTDIR is NOT honoured for the configure location.
           # -l caps load so the 16 GB runner does not OOM on link steps.
-          ninja -C "$WEBKIT_OUTPUTDIR" -j2 -l3.0 2>&1 | tee build.log | tail -30
+          ninja -C WebKitBuild/GTK/Release -j2 -l3.0 2>&1 | tee build.log | tail -30
 
       - name: Verify media is actually gone (not stubbed)
         run: |
           set -euo pipefail
-          LIB=$(find "$WEBKIT_OUTPUTDIR" -name 'libwebkitgtk-*.so.*' -type f | head -1)
+          LIB=$(find src/WebKit/WebKitBuild -name 'libwebkitgtk-*.so.*' -type f | head -1)
           if [ -z "$LIB" ]; then
-            echo "FAIL: no libwebkitgtk shared object found under $WEBKIT_OUTPUTDIR"
+            echo "FAIL: no libwebkitgtk shared object found under src/WebKit/WebKitBuild"
             echo "--- what was actually built ---"
-            find "$WEBKIT_OUTPUTDIR" -name '*.so*' | head -20
+            find src/WebKit/WebKitBuild -name '*.so*' -type f | head -20
             exit 1
           fi
           echo "lib: $LIB"
@@ -144,14 +147,14 @@ jobs:
           echo "--- library size ---"
           ls -lh "$LIB"
           echo "--- total build dir size (10 GB cap) ---"
-          du -sh "$WEBKIT_OUTPUTDIR" src/WebKit
+          du -sh src/WebKit/WebKitBuild src/WebKit
           df -h /
           echo "OK: verification passed"
 
       - name: Measure RSS delta
         run: |
           set -uo pipefail
-          RELEASEDIR="$WEBKIT_OUTPUTDIR/GTK/Release"
+          RELEASEDIR=src/WebKit/WebKitBuild/GTK/Release
           if [ ! -d "$RELEASEDIR" ]; then
             echo "no $RELEASEDIR; skipping RSS measurement"
             exit 0
@@ -181,5 +184,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: webkitgtk-stripped
-          path: ${{ env.WEBKIT_OUTPUTDIR }}/GTK/Release/lib/
+          path: |
+            src/WebKit/WebKitBuild/GTK/Release/lib/
+            src/WebKit/WebKitBuild/GTK/Release/bin/
           retention-days: 30
