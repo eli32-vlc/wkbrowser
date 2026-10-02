@@ -43,3 +43,6 @@ id_rsa*
 *.pfx
 credentials.json
 gh-token
+
+# CI test artifacts
+tests/actual_fingerprint.json

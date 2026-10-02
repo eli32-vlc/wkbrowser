@@ -1,0 +1,85 @@
+name: test-embedder
+
+# Fast feedback on the embedder layer. This runs in about two minutes and
+# needs no WebKit source build, so it can gate every push. The expensive
+# source build lives in build-webkit-stripped.yml and runs on demand only.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-embedder-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  embedder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev xvfb pkg-config
+
+      - name: Build wkbrowser
+        run: ./src/build.sh
+
+      - name: File-picker acceptance (t7)
+        run: |
+          # t7 asserts the native dialog is never constructed and that the
+          # uploaded bytes arrive verbatim.
+          chmod +x src/test_t7.sh
+          ./src/test_t7.sh
+
+      - name: Phase-2 acceptance
+        run: |
+          chmod +x src/test_p2.sh
+          ./src/test_p2.sh
+
+      - name: Fingerprint regression
+        run: |
+          chmod +x src/probe_check.sh
+          ./src/probe_check.sh
+
+      - name: Disk budget
+        run: ./research/budget.sh
+
+      - name: Workflow lint
+        run: |
+          # Every run block must be valid bash, and no step may silently mask
+          # a failure. This is what caught the tee-without-pipefail bug.
+          for f in .github/workflows/*.yml; do
+            echo "--- $f"
+            python3 -c "import yaml,sys; yaml.safe_load(open('$f')); print('  yaml OK')"
+          done
+          python3 - <<'PY'
+          import yaml, subprocess, glob, sys
+          bad = []
+          for f in glob.glob('.github/workflows/*.yml'):
+              d = yaml.safe_load(open(f))
+              for job in d.get('jobs', {}).values():
+                  for i, st in enumerate(job.get('steps', [])):
+                      if 'run' not in st:
+                          continue
+                      p = f'/tmp/lint_{abs(hash((f,i)))}.sh'
+                      open(p, 'w').write(st['run'])
+                      r = subprocess.run(['bash', '-n', p], capture_output=True)
+                      if r.returncode:
+                          bad.append((f, st.get('name'), r.stderr.decode()[:200]))
+                      # a piped step without pipefail can hide a failure
+                      body = st['run']
+                      if '| tee' in body and 'pipefail' not in body:
+                          bad.append((f, st.get('name'), 'piped to tee without pipefail'))
+          if bad:
+              for f, n, e in bad:
+                  print(f'BAD {f} :: {n} :: {e}')
+              sys.exit(1)
+          print('all workflow run blocks pass bash -n and pipefail checks')
+          PY
