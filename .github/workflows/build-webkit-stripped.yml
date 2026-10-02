@@ -48,40 +48,37 @@ jobs:
           git clone --depth 1 https://github.com/WebKit/WebKit.git src/WebKit
           du -sh src/WebKit
 
-      - name: Install build dependencies
+      - name: Install build dependencies (apt, explicit)
+        # NOTE: there is no Tools/Scripts/install-dependencies in current
+        # WebKit main. The list below is the GTK4-port dependency set; the
+        # second block is a reduced fallback if any optional package is
+        # missing on the runner image.
         run: |
           sudo apt-get update
-          # Ask WebKit itself for the GTK-port dependency list, then add the
-          # generic toolchain. Guessing package names one CMake error at a
-          # time wastes a full runner per missing library.
-          set -o pipefail
-          ls src/WebKit/Tools/Scripts/install-dependencies* || true
-          ./src/WebKit/Tools/Scripts/install-dependencies --gtk 2>&1 | tail -25
-
-      - name: Install toolchain and media-adjacent headers
-        run: |
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build ccache gperf bison flex \
-            python3 python3-dev git wget ca-certificates \
-            libgcrypt20-dev libssl-dev libicu-dev libwoff-dev \
-            libwebp-dev libavif-dev libjpeg-dev libopenjp2-7-dev \
-            libsecret-1-dev libnotify-dev libjsoncpp-dev \
-            libopus-dev libhyphen-dev \
+            python3 python3-dev git wget ca-certificates pkg-config \
+            libgcrypt20-dev libssl-dev libicu-dev libwoff-dev libjansson-dev \
+            libwebp-dev libavif-dev libjpeg-dev libopenjp2-7-dev libtiff-dev \
+            libsecret-1-dev libnotify-dev libjsoncpp-dev libtasn1-6-dev \
+            libsoup-3.0-dev libpsl-dev libsqlite3-dev \
             libcairo2-dev libpango1.0-dev libatk1.0-dev \
-            libatk-bridge2.0-dev libgtk-3-dev libgdk-pixbuf-2.0-dev \
-            libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev \
-            libx11-dev libxext-dev libxi-dev libxtst-dev \
+            libatk-bridge2.0-dev libgtk-4-dev libgtk-3-dev \
+            libgdk-pixbuf-2.0-dev libepoxy-dev \
+            libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxext-dev libxi-dev libxtst-dev libxcursor-dev \
             libwayland-dev wayland-protocols libdrm-dev libgbm-dev \
-            libsoup-3.0-dev libpsl-dev libtasn1-6-dev libjansson-dev \
-            xvfb gir1.2-gtk-3.0 gir1.2-gtk-4.0 \
-            || { echo "WARN: some optional packages unavailable on this runner"; \
-                 sudo apt-get install -y --no-install-recommends \
-                   build-essential cmake ninja-build ccache gperf bison flex \
-                   python3 python3-dev git ca-certificates \
-                   libgcrypt20-dev libssl-dev libicu-dev libwoff-dev \
-                   libwebp-dev libsecret-1-dev libjsoncpp-dev \
-                   libgtk-3-dev libgtk-4-dev libcairo2-dev libpango1.0-dev \
-                   libsoup-3.0-dev libtasn1-6-dev xvfb; }
+            libhyphen-dev libenchant-2-dev libmanette-0.2-dev \
+            libopus-dev xvfb gir1.2-gtk-4.0 gir1.2-gtk-3.0 \
+          || { echo "WARN: falling back to reduced dependency set"; \
+               sudo apt-get install -y --no-install-recommends \
+                 build-essential cmake ninja-build ccache gperf bison flex \
+                 python3 git ca-certificates pkg-config \
+                 libgcrypt20-dev libssl-dev libicu-dev libwoff-dev \
+                 libgtk-4-dev libgtk-3-dev libcairo2-dev libpango1.0-dev \
+                 libegl1-mesa-dev libgles2-mesa-dev libgbm-dev \
+                 libsoup-3.0-dev libtasn1-6-dev libjansson-dev libsqlite3-dev \
+                 xvfb; }
 
       - uses: actions/cache@v4
         with:
