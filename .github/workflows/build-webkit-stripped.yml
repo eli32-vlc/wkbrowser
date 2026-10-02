@@ -59,6 +59,7 @@ jobs:
             libwayland-dev wayland-protocols libdrm-dev libgbm-dev \
             libavif-dev libjpeg-dev libopenjp2-7-dev libtiff-dev \
             libsecret-1-dev libnotify-dev libjsoncpp-dev \
+            libsoup-3.0-dev libpsl-dev \
             xvfb gir1.2-gtk-3.0
           # NOTE: no gir1.2-webkit2-6.0 here. We build libwebkit ourselves, and
           # the Ubuntu runner does not package that introspection name. GTK3 is
