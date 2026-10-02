@@ -60,6 +60,7 @@ jobs:
             python3 python3-dev git wget ca-certificates pkg-config \
             libgcrypt20-dev libssl-dev libicu-dev libwoff-dev libjansson-dev \
             libwebp-dev libavif-dev libjpeg-dev libopenjp2-7-dev libtiff-dev \
+            libjxl-dev libwebpdemux2 libsharpyuv-dev libheif-dev \
             libsecret-1-dev libnotify-dev libjsoncpp-dev libtasn1-6-dev \
             libsoup-3.0-dev libpsl-dev libsqlite3-dev \
             libcairo2-dev libpango1.0-dev libatk1.0-dev \
@@ -88,6 +89,48 @@ jobs:
           key: webkit-stripped-${{ hashFiles('.github/workflows/build-webkit-stripped.yml') }}
           restore-keys: webkit-stripped-
 
+      - name: Auto-install any missing optional libraries
+        # Rather than burn a full runner per unknown optional dep, probe
+        # configure and retry once with whatever CMake just complained about.
+        run: |
+          cd src/WebKit
+          ARGS_FILE=/tmp/wkb-cmake-args
+          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
+          ARGS="$ARGS -DENABLE_WEB_RTC=OFF -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF"
+          ARGS="$ARGS -DENABLE_WEBXR_HANDS=OFF -DENABLE_WEBXR_HIT_TEST=OFF"
+          ARGS="$ARGS -DENABLE_WEBXR_LAYERS=OFF -DENABLE_GAMEPAD=OFF"
+          ARGS="$ARGS -DENABLE_MEDIA_STREAM=OFF -DENABLE_WEB_CODECS=OFF"
+          ARGS="$ARGS -DENABLE_VIDEO=OFF -DENABLE_WEB_AUDIO=OFF"
+          ARGS="$ARGS -DENABLE_SPEECH_SYNTHESIS=OFF -DENABLE_MHTML=OFF"
+          ARGS="$ARGS -DENABLE_PDFJS=OFF -DENABLE_XSLT=OFF -DENABLE_JOURNALD_LOG=OFF"
+          ARGS="$ARGS -DENABLE_WEBDRIVER=OFF -DENABLE_DEVELOPER_MODE=OFF"
+          ARGS="$ARGS -DENABLE_EXPERIMENTAL_FEATURES=OFF -DENABLE_API_TESTS=OFF"
+          ARGS="$ARGS -DENABLE_INTROSPECTION=OFF -DUSE_GSTREAMER=OFF"
+          printf '%s' "$ARGS" > "$ARGS_FILE"
+
+          for ATTEMPT in 1 2 3; do
+            echo "===== configure attempt $ATTEMPT ====="
+            if Tools/Scripts/build-webkit --release --gtk --only-webkit \
+                 --cmakeargs="$ARGS" > /tmp/wkb-configure.log 2>&1; then
+              echo "CONFIGURE_OK"
+              exit 0
+            fi
+            MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log | head -1 | awk '{print $4}')
+            echo "missing package for: $MISSING"
+            case "$MISSING" in
+              JPEGXL)   sudo apt-get install -y libjxl-dev ;;
+              AVIF)      sudo apt-get install -y libavif-dev ;;
+              WebP)      sudo apt-get install -y libwebp-dev ;;
+              HEIF)      sudo apt-get install -y libheif-dev ;;
+              LibSoup3|Soup3) sudo apt-get install -y libsoup-3.0-dev ;;
+              WPE)       sudo apt-get install -y libwayland-dev wayland-protocols ;;
+              GLib)      sudo apt-get install -y libglib2.0-dev ;;
+              GStreamer) sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ;;
+              *) echo "no known package for $MISSING; stopping" && tail -30 /tmp/wkb-configure.log && exit 1 ;;
+            esac
+          done
+          echo "configure did not converge"; tail -40 /tmp/wkb-configure.log; exit 1
+
       - name: Patch GStreamer so USE_GSTREAMER=OFF actually sticks
         # Upstream PR #61274: USE_GSTREAMER is unconditionally forced back to
         # TRUE if any of ENABLE_VIDEO / ENABLE_WEB_AUDIO / ENABLE_WEB_CODECS is
@@ -99,35 +142,24 @@ jobs:
             Source/cmake/GStreamerChecks.cmake || true
           grep -n 'USE_GSTREAMER' Source/cmake/GStreamerChecks.cmake | head
 
-      - name: Configure (Release, stripped)
+      - name: Verify configure cache reflects the strip flags
+        # The retry loop already ran a successful configure. Assert the
+        # stripping actually took effect instead of trusting exit status.
         run: |
           set -euo pipefail
-          cd src/WebKit
-          # NOTE: pass cmakeargs on ONE line. A multi-line YAML folded string
-          # gets flattened to spaces with no continuation, so every flag after
-          # the first is read as a separate shell command.
-          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
-          ARGS="$ARGS -DENABLE_WEB_RTC=OFF"
-          ARGS="$ARGS -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF -DENABLE_WEBXR_HANDS=OFF"
-          ARGS="$ARGS -DENABLE_WEBXR_HIT_TEST=OFF -DENABLE_WEBXR_LAYERS=OFF"
-          ARGS="$ARGS -DENABLE_GAMEPAD=OFF -DENABLE_MEDIA_STREAM=OFF"
-          ARGS="$ARGS -DENABLE_WEB_CODECS=OFF -DENABLE_VIDEO=OFF -DENABLE_WEB_AUDIO=OFF"
-          ARGS="$ARGS -DENABLE_SPEECH_SYNTHESIS=OFF -DENABLE_MHTML=OFF"
-          ARGS="$ARGS -DENABLE_PDFJS=OFF -DENABLE_XSLT=OFF -DENABLE_JOURNALD_LOG=OFF"
-          ARGS="$ARGS -DENABLE_WEBDRIVER=OFF -DENABLE_DEVELOPER_MODE=OFF"
-          ARGS="$ARGS -DENABLE_EXPERIMENTAL_FEATURES=OFF -DENABLE_API_TESTS=OFF"
-          ARGS="$ARGS -DENABLE_INTROSPECTION=OFF -DUSE_GSTREAMER=OFF"
-          echo "cmake args: $ARGS"
-          Tools/Scripts/build-webkit --release --gtk --only-webkit \
-            --cmakeargs="$ARGS" 2>&1 | tee configure.log | tail -40
-          # Prove the flags actually took effect, do not trust exit status.
-          echo "--- cache verification ---"
-          CFG=WebKitBuild/GTK/Release/CMakeCache.txt
-          for K in USE_GSTREAMER ENABLE_WEB_RTC ENABLE_MEDIA_STREAM ENABLE_WEB_CODECS; do
-            printf '%-24s %s\n' "$K" "$(grep -E "^$K:" "$CFG" || echo 'ABSENT')"
+          CFG=src/WebKit/WebKitBuild/GTK/Release/CMakeCache.txt
+          test -f "$CFG" || { echo "FAIL: no CMakeCache at $CFG";             find src/WebKit -maxdepth 3 -name CMakeCache.txt; exit 1; }
+          echo "--- resolved strip flags ---"
+          for K in USE_GSTREAMER ENABLE_WEB_RTC ENABLE_MEDIA_STREAM \
+                   ENABLE_WEB_CODECS ENABLE_VIDEO ENABLE_GAMEPAD \
+                   ENABLE_SPEECH_SYNTHESIS ENABLE_MHTML; do
+            printf '%-26s %s\n' "$K" "$(grep -E "^$K:" "$CFG" | cut -d= -f2 || echo ABSENT)"
           done
-          echo "--- build dir created? ---"
-          find . -maxdepth 2 -name 'WebKitBuild*' -type d
+          if grep -E '^USE_GSTREAMER:' "$CFG" | grep -qi ':BOOL=ON'; then
+            echo "FAIL: USE_GSTREAMER is ON, media was not stripped"
+            exit 1
+          fi
+          echo "OK: USE_GSTREAMER is not ON"
 
       - name: Build
         run: |
