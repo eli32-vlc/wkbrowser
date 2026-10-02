@@ -144,6 +144,13 @@ jobs:
               GTK)          sudo apt-get install -y libgtk-4-dev libgtk-3-dev ;;
               Pango)        sudo apt-get install -y libpango1.0-dev ;;
               Cairo)        sudo apt-get install -y libcairo2-dev ;;
+              # Sandbox libs are irrelevant to a single-user headless scraper.
+              Libseccomp)   echo "seccomp not packaged; disabling bubblewrap sandbox"; \
+                            ARGS="$ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF"; \
+                            printf '%s' "$ARGS" > "$ARGS_FILE" ;;
+              bubblewrap|Bubblewrap) \
+                            ARGS="$ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF"; \
+                            printf '%s' "$ARGS" > "$ARGS_FILE" ;;
               *) echo "no known package for $MISSING; stopping" && tail -30 /tmp/wkb-configure.log && exit 1 ;;
             esac
           done
