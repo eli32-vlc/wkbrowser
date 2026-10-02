@@ -8,7 +8,7 @@ Status legend: `[ ]` open · `[x]` done · `[~]` partial
 
 ---
 
-## P2-1 `[ ]` Ephemeral context per navigation
+## P2-1 `[x]` Ephemeral context per navigation — DONE, CI-green
 
 **Why:** cookies, localStorage, IndexedDB and HTTP auth persist in a
 `WebKitWebContext` for its whole lifetime. A scraper that reuses one context
@@ -31,7 +31,7 @@ leaks its own session between sites — both a correctness bug and a fingerprint
 
 ---
 
-## P2-2 `[ ]` Block images, fonts and media
+## P2-2 `[x]` Block images, fonts and media — DONE, CI-green
 
 **Why:** the single largest scraping speed and bandwidth win. Also cuts
 third-party origins that would otherwise observe the visit.
@@ -45,6 +45,16 @@ third-party origins that would otherwise observe the visit.
 - Add `--block-stylesheets` separately, because many sites hide content behind
   JS-injected CSS but a few break entirely without it. Default off.
 
+**IMPLEMENTATION NOTE.** WebKitGTK 2.50.6's `resource-load-started` passes a
+`WebKitURIRequest`, which has no `get_resource_type()`. The richer
+`WebKitURIResourceRequest` type does not exist in this version. So classification
+is by URI extension (query and fragment stripped) rather than by the resource
+type WebKit assigned. This covers the large majority of CDN subresources but
+will miss extensionless URLs.
+
+Measured: `blocked=4 allowed=3` with `--block-assets`, against a control run
+at `blocked=0 allowed=7`, so the blocking is demonstrably selective.
+
 **Accept:** with `--block-assets`, a page with 40 images loads in visibly less
 wall time and `performance.getEntriesByType('resource')` contains no `img`
 entries, while the DOM still parses identically.
@@ -53,7 +63,7 @@ entries, while the DOM still parses identically.
 
 ---
 
-## P2-3 `[ ]` Block analytics and beacon noise
+## P2-3 `[x]` Block analytics and beacon noise — DONE, CI-green (design changed)
 
 **Why:** third-party scripts are the highest-fidelity tracking vector and the
 most common cause of a scraper being fingerprinted by request-pattern
@@ -76,7 +86,7 @@ neither `google-analytics.com` nor `sentry.io` in the resource timing list.
 
 ---
 
-## P2-4 `[~]` Coherent modern UA + Client Hints
+## P2-4 `[ ]` Coherent modern UA + Client Hints — still open
 
 **Status:** UA override via injection works today. Client Hints do **not**.
 
@@ -113,7 +123,7 @@ Linux Chromium build, and the mismatch between UA and the actual engine
 
 ---
 
-## P2-5 `[ ]` Automated detection probe with before/after diff
+## P2-5 `[x]` Automated detection probe — DONE, CI-green
 
 **Why:** every change in P2-1…P2-4 can accidentally *increase* detectability.
 Without a regression test you are flying blind, and several of these changes
@@ -141,7 +151,7 @@ so you can measure P2-4.
 
 ---
 
-## P2-6 `[ ]` Build-time media/GPU strip (needs Actions source build)
+## P2-6 `[~]` Build-time media/GPU strip — IN PROGRESS, no green build yet
 
 **Why:** the only item that satisfies "removed at build time, not stubbed at
 runtime". Everything above can be done with injection; this genuinely deletes
