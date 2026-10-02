@@ -108,7 +108,7 @@ jobs:
           ARGS="$ARGS -DENABLE_INTROSPECTION=OFF -DUSE_GSTREAMER=OFF"
           printf '%s' "$ARGS" > "$ARGS_FILE"
 
-          for ATTEMPT in 1 2 3; do
+          for ATTEMPT in 1 2 3 4 5 6 7 8; do
             echo "===== configure attempt $ATTEMPT ====="
             if Tools/Scripts/build-webkit --release --gtk --only-webkit \
                  --cmakeargs="$ARGS" > /tmp/wkb-configure.log 2>&1; then
@@ -152,8 +152,16 @@ jobs:
               bubblewrap|Bubblewrap) \
                             ARGS="$ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF"; \
                             printf '%s' "$ARGS" > "$ARGS_FILE" ;;
-              *) echo "no known package for $MISSING; stopping" && tail -30 /tmp/wkb-configure.log && exit 1 ;;
-            esac
+              "") echo "nothing to install" ;;
+              # Last resort: let apt search, so a guess is not required.
+              *) PKG=$(apt-cache search --names-only "lib${MISSING,,}-dev" 2>/dev/null | head -1 | cut -d' ' -f1) ;;
+              esac
+              if [ -z "${PKG:-}" ]; then
+                echo "no known package for $MISSING; stopping"
+                tail -30 /tmp/wkb-configure.log; exit 1
+              fi
+              echo "auto-resolved $MISSING -> $PKG"
+              sudo apt-get install -y "$PKG" ;;
           done
           echo "configure did not converge"; tail -40 /tmp/wkb-configure.log; exit 1
 
