@@ -94,7 +94,7 @@ jobs:
         # configure and retry, installing whatever CMake just complained about.
         run: |
           cd src/WebKit
-          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1 -Wno-ignored-attributes"
+          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1 -DCMAKE_CXX_FLAGS=-Wno-ignored-attributes"
           ARGS="$ARGS -DENABLE_WEB_RTC=OFF -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_HANDS=OFF -DENABLE_WEBXR_HIT_TEST=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_LAYERS=OFF -DENABLE_GAMEPAD=OFF"
@@ -198,6 +198,11 @@ jobs:
           sed -i 's/^\(\s*\)set(USE_GSTREAMER \(TRUE\|ON\)\)/\1message(STATUS "wkb: USE_GSTREAMER forced OFF")\n\1set(USE_GSTREAMER OFF)/' \
             Source/cmake/GStreamerChecks.cmake || true
           grep -n 'USE_GSTREAMER' Source/cmake/GStreamerChecks.cmake | head
+          # Clang rejects __attribute__((noescape)) on non-pointer parameters,
+          # and WebKit compiles with -Werror. Strip the attribute rather than
+          # rely on warning suppression surviving every flag path.
+          sed -i 's/__attribute__((noescape))//g' Source/WTF/wtf/StdLibExtras.h
+          echo "noescape attributes remaining: $(grep -c noescape Source/WTF/wtf/StdLibExtras.h || true)"
 
       - name: Verify configure cache reflects the strip flags
         # The retry loop already ran a successful configure. Assert the
