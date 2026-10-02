@@ -14,8 +14,14 @@ injects a configurable synthetic-value profile.
 | t5 fake value API | **done, verified** | probe output in FINDINGS.md |
 | t7 file picker API | **done, verified** | `src/test_t7.sh` passes |
 | t8 anti-detection | partial | `webdriver` already false; UA/WebGL pending |
-| t3/t6/t9 source build | blocked | needs >16 GB RAM host |
-| t10 disk audit | partial | 200 KB used vs 10 GB cap |
+| P2-1 ephemeral context | **done, CI-green** | `src/test_p2.sh` |
+| P2-2 asset blocking | **done, CI-green** | blocked=4 allowed=3 |
+| P2-3 domain blocklist | **done, CI-green** | 53 entries parsed |
+| P2-5 detection probe | **done, CI-green** | 22 vectors, diff exits non-zero |
+| P2-4 UA profiles | open | needs coherent Client Hints, source patch |
+| P2-6 source build | **NOT done** | no green build, RSS delta unknown |
+
+Full status and the defects CI surfaced: see `PROGRESS.md`.
 
 ## Build
 
@@ -33,10 +39,12 @@ xvfb-run -a -s '-screen 0 1280x800x24' ./dist/wkbrowser --url URL [options]
 
 ### Options
 
+Run `./dist/wkbrowser --help` for the authoritative list.
+
 ```
 --url URL          page to load (required)
 --dump             print document.body.innerText after load
---probe            print a JSON fingerprint probe after load
+--probe            print the fingerprint vector set as JSON
 --file PATH        register PATH as the file the picker returns
 --screen WxH       fake screen dimensions
 --geo LAT,LON      fake geolocation
@@ -44,6 +52,14 @@ xvfb-run -a -s '-screen 0 1280x800x24' ./dist/wkbrowser --url URL [options]
 --memory GB        fake navigator.deviceMemory
 --ua STRING        fake navigator.userAgent
 --tz STRING        fake Intl timezone
+
+network:
+--block-assets     cancel images, fonts and media
+--block-styles     also cancel stylesheets
+--blocklist FILE   blocklist file (default share/wkb-blocklist.txt)
+--no-blocklist     disable blocking
+--block DOMAIN     block one domain substring (repeatable)
+--persist          keep cookies/storage instead of an ephemeral session
 ```
 
 ## Example: verified fake-value run
@@ -59,7 +75,18 @@ $ xvfb-run -a ./dist/wkbrowser --url "data:text/html,<h1>probe</h1>" --probe \
 ## Tests
 
 ```sh
-./src/test_t7.sh    # file chooser + byte-exact upload verification
+./src/test_t7.sh       # file chooser + byte-exact upload verification
+./src/test_p2.sh       # ephemeral context, asset blocking, blocklist
+./src/probe_check.sh   # fingerprint regression against the baseline
+```
+
+All three run in CI on every push via `.github/workflows/test-embedder.yml`,
+which completes in about two minutes.
+
+Refresh the fingerprint baseline deliberately:
+
+```sh
+./src/probe_check.sh --update
 ```
 
 ## Architecture
@@ -67,15 +94,45 @@ $ xvfb-run -a ./dist/wkbrowser --url "data:text/html,<h1>probe</h1>" --probe \
 - `src/wkb.h` — profile struct + public API
 - `src/wkb_profile.c` — synthetic-value injection (DOCUMENT-END user scripts)
 - `src/wkb_files.c` — file registry / `run-file-chooser` handler
+- `src/wkb_net.c` — ephemeral context, asset blocking, domain blocklist
+- `src/wkb_probe.c` — the fingerprint vector set
 - `src/wkbrowser.c` — CLI driver
+- `share/wkb-blocklist.txt` — 53-entry default blocklist
+- `tests/fixtures/` — upload form and server for the t7 test
 - `src/null_view_backend.c` — dead WPE experiment, kept for the record
 
 ## Known limits
 
-- Peak RSS ~414 MB unstripped. Getting to "super light" needs a source build
-  with media/GPU paths removed, which needs a host with >16 GB RAM.
-- `navigator.webdriver` is already false; UA string is still the stock
-  Safari-60-era value and needs a coherent modern profile.
-- WebGL renderer string still leaks the real Mesa stack (needs engine patch).
+- Peak RSS ~414 MB unstripped. Reducing it needs a source build with
+  media/GPU paths removed, which has not yet compiled successfully in CI.
+- `navigator.webdriver` is already false. The UA string is still the stock
+  Safari-60-era value and needs a coherent modern profile (P2-4).
+- WebGL reports `Apple GPU | Apple Inc.` under Mesa, which no real Linux
+  machine would report. Fixing it needs an engine patch.
 - File picker cannot pre-populate `input.files` from the embedder; automation
   must trigger the picker via a synthetic click. This is a WebKit API limit.
+- Asset blocking classifies by URI extension, not by the resource type WebKit
+  assigned, because `WebKitURIRequest` in 2.50.6 exposes no `get_resource_type()`.
+  Extensionless CDN URLs will slip through.
+- `Notification.permission` reads `denied` on `data:` URLs but `default` on
+  `http:`. That inconsistency is itself a signal; the probe asserts it so a
+  change is visible.
+
+## Upstream limitations that shaped the design
+
+Both verified against the installed headers rather than assumed:
+
+- **No content-filter API.** `WebKitUserContentFilter` has no public
+  constructor in 2.50.6 (confirmed with `nm` on the shipped library), so the
+  blocklist is enforced by cancelling subresource loads instead of a JSON
+  rule set.
+- **No resource type on the request.** `resource-load-started` passes a
+  `WebKitURIRequest` with no resource-type accessor.
+
+## Legal scope
+
+The user's own identity and legitimate automation. No CAPTCHA or MFA defeat,
+no multi-identity rotation to evade rate limits, no scraping that ignores a
+site's terms of service. HiQ v. LinkedIn settled the CFAA question for
+public-page scraping but the ToS claim still failed, so ToS remains live civil
+risk even where the CFAA is not.
