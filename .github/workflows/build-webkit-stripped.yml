@@ -122,14 +122,30 @@ jobs:
             # cannot be diagnosed after the fact.
             echo "### configure attempt $ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
             date -u '+%H:%M:%S attempting configure' >> "$GITHUB_STEP_SUMMARY"
-            if Tools/Scripts/build-webkit --release --gtk --only-webkit \
-                 --cmakeargs="$ARGS" > /tmp/wkb-configure.log 2>&1; then
+            # Hard bound per attempt. A previous run hung here for 100 minutes
+            # with no output at all, which is worse than failing: it ate the
+            # entire job budget and told us nothing.
+            rc=0
+            # `cmd || rc=$?` rather than `if cmd; then ...; fi; rc=$?`: the
+            # latter captures the compound's status, which is 0 whenever no
+            # else branch ran, silently losing the timeout code.
+            timeout 900 Tools/Scripts/build-webkit --release --gtk --only-webkit \
+                 --cmakeargs="$ARGS" > /tmp/wkb-configure.log 2>&1 || rc=$?
+            if [ $rc -eq 0 ]; then
               echo "CONFIGURE_OK"
               printf '%s' "$ARGS" > /tmp/wkb-final-args
               exit 0
             fi
             MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log \
                       | head -1 | awk '{print $4}')
+            if [ $rc -eq 124 ]; then
+              echo "configure attempt $ATTEMPT TIMED OUT after 900s; skipping to next" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+              # A hang is usually a stale cache from the previous attempt.
+              rm -f src/WebKit/WebKitBuild/CMakeCache.txt
+              rm -rf src/WebKit/WebKitBuild/CMakeFiles
+              continue
+            fi
             echo "configure asked for: ${MISSING:-<none parsed>}" | tee -a "$GITHUB_STEP_SUMMARY"
             if [ -z "$MISSING" ]; then
               echo "configure failed for a reason other than a missing library"
