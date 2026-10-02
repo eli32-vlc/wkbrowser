@@ -12,9 +12,11 @@ WkbProfile* wkb_profile_new(void)
 {
     WkbProfile* p = g_new0(WkbProfile, 1);
     p->files = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    p->blocklist = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     p->acc = -1.0;   // -1 => geolocation unset
     p->cores = 0;
     p->memory_gb = 0.0;
+    p->ephemeral = TRUE;   // scraping default: no state carried between pages
     return p;
 }
 
@@ -22,6 +24,7 @@ void wkb_profile_free(WkbProfile* p)
 {
     if (!p) return;
     g_hash_table_destroy(p->files);
+    g_hash_table_destroy(p->blocklist);
     g_free(p->default_file);
     g_free(p->ua);
     g_free(p->tz);

@@ -1,0 +1,19 @@
+<!DOCTYPE html><html><head><title>p2test</title>
+<link rel="stylesheet" href="/style.css">
+<style>#s{font:12px sans-serif}</style>
+</head><body>
+<h1>phase2 test</h1>
+<img src="/img/logo.png" alt="l">
+<img src="https://www.google-analytics.com/collect?v=2">
+<img src="/img/a.png"><img src="/img/b.jpg">
+<script src="/s.js"></script>
+<video src="/v.mp4" muted></video>
+<script>
+ document.getElementById('n').textContent = document.cookie || '(none)';
+ fetch('/setcookie').then(()=>{});
+</script>
+<p id="n">pending</p>
+<p id="s">0</p>
+<script>document.getElementById('s').textContent =
+  performance.getEntriesByType('resource').map(r=>r.name.split('/').pop()).join(',');</script>
+</body></html>

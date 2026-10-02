@@ -1,0 +1,77 @@
+# wkb default blocklist
+#
+# Substring match against request URIs, so entries catch subdomains without
+# needing a public-suffix list. One entry per line, '#' starts a comment.
+#
+# Purpose: cut third-party analytics and beacon noise, which is both the
+# largest tracking surface and a common source of request-pattern
+# fingerprinting. This reduces signal; it is not a privacy tool.
+
+# --- Google analytics / advertising ---
+google-analytics.com
+googletagmanager.com
+doubleclick.net
+googlesyndication.com
+google-analytics
+
+# --- Microsoft / Clarity ---
+bat.bing.com
+clarity.ms
+
+# --- Session replay / heatmaps ---
+hotjar.com
+hotjar.io
+fullstory.com
+mouseflow.com
+luckyorange.com
+inspectlet.com
+smartlook.com
+
+# --- Product analytics ---
+segment.io
+segment.com/api
+mixpanel.com
+amplitude.com
+heap.io
+heapanalytics.com
+pendo.io
+intercom.io
+intercomcdn.com
+driftt.com
+customer.io
+braze.com
+appboy.com
+
+# --- Error / crash reporting ---
+sentry.io
+bugsnag.com
+rollbar.com
+datadoghq.com
+newrelic.com
+nr-data.net
+appsflyer.com
+
+# --- Tag managers / experimentation ---
+optimizely.com
+vwo.com
+abtasty.com
+dynamicyield.com
+crazyegg.com
+launchdarkly.com
+split.io
+
+# --- Social pixels ---
+connect.facebook.net
+facebook.com/tr
+analytics.tiktok.com
+px.ads.linkedin.com
+snapchat.com/tr
+hotjar.hs-scripts.com
+
+# --- Generic beacons ---
+/collect
+/track
+/beacon
+/pixel
+/gather
+/trackview
