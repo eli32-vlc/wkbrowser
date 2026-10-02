@@ -94,7 +94,7 @@ jobs:
         # configure and retry, installing whatever CMake just complained about.
         run: |
           cd src/WebKit
-          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
+          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1 -Wno-ignored-attributes"
           ARGS="$ARGS -DENABLE_WEB_RTC=OFF -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_HANDS=OFF -DENABLE_WEBXR_HIT_TEST=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_LAYERS=OFF -DENABLE_GAMEPAD=OFF"
