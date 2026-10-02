@@ -122,6 +122,11 @@ jobs:
             MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log \
                       | head -1 | awk '{print $4}')
             echo "configure asked for: ${MISSING:-<none parsed>}"
+            if [ -z "$MISSING" ]; then
+              echo "configure failed for a reason other than a missing library"
+              tail -40 /tmp/wkb-configure.log
+              exit 1
+            fi
             PKG=""
             case "$MISSING" in
               LibBacktrace)
