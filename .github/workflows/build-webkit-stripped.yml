@@ -54,7 +54,12 @@ jobs:
             libenchant-2-dev libhyphen-dev libmanette-0.2-dev \
             libgles2-mesa-dev libegl1-mesa-dev libglib2.0-dev \
             libx11-dev libxext-dev libxi-dev libxtst-dev \
-            xvfb gir1.2-gtk-4.0
+            libcairo2-dev libpango1.0-dev libatk1.0-dev libatk-bridge2.0-dev \
+            libgtk-3-dev libgdk-pixbuf-2.0-dev libepoxy-dev \
+            libwayland-dev wayland-protocols libdrm-dev libgbm-dev \
+            libavif-dev libjpeg-dev libopenjp2-7-dev libtiff-dev \
+            libsecret-1-dev libnotify-dev libjsoncpp-dev \
+            xvfb gir1.2-gtk-3.0
           # NOTE: no gir1.2-webkit2-6.0 here. We build libwebkit ourselves, and
           # the Ubuntu runner does not package that introspection name. GTK3 is
           # the port being built, so gir1.2-gtk-3.0 is the correct dep.
