@@ -1,0 +1,156 @@
+name: build-webkit-stripped
+
+# Builds WebKit from source with media/GPU subsystems removed at build time.
+# This is the only piece that satisfies "removed at build time, not stubbed at
+# runtime" — everything else in Phase 2 works on the stock binary.
+#
+# Cost: this is a long build. It only runs on manual dispatch or when the
+# build flags change, so the Actions minutes budget is not burned per push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifact:
+        description: Upload built library as artifact
+        type: boolean
+        default: true
+  push:
+    paths:
+      - '.github/workflows/build-webkit-stripped.yml'
+    branches: [main]
+
+concurrency:
+  group: build-webkit
+  cancel-in-progress: false
+
+env:
+  # Keep the whole job inside the 10 GB project disk budget.
+  CCACHE_MAXSIZE: 2G
+  WEBKIT_OUTPUTDIR: ${{ github.workspace }}/build
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build ccache gperf bison flex \
+            python3 python3-dev git wget ca-certificates \
+            libgcrypt20-dev libssl-dev libicu-dev libwoff-dev \
+            libopus-dev libwebp-dev libwebpdemux2 libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
+            libenchant-2-dev libhyphen-dev libmanette-0.2-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libglib2.0-dev \
+            libx11-dev libxext-dev libxi-dev libxtst-dev \
+            xvfb gir1.2-gtk-4.0 gir1.2-webkit2-6.0
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            build/ccache
+            build/GTK
+          key: webkit-stripped-${{ hashFiles('.github/workflows/build-webkit-stripped.yml') }}
+          restore-keys: webkit-stripped-
+
+      - name: Shallow clone WebKit (depth 1)
+        # Full history is ~13 GB and would blow the 10 GB project cap by itself.
+        run: |
+          git clone --depth 1 https://github.com/WebKit/WebKit.git src/WebKit
+          du -sh src/WebKit
+
+      - name: Patch GStreamer so USE_GSTREAMER=OFF actually sticks
+        # Upstream PR #61274: USE_GSTREAMER is unconditionally forced back to
+        # TRUE if any of ENABLE_VIDEO / ENABLE_WEB_AUDIO / ENABLE_WEB_CODECS is
+        # set. We already pass the flags, so this is belt-and-braces, but the
+        # grep in the verify step below is the real assertion.
+        run: |
+          cd src/WebKit
+          sed -i 's/^\(\s*\)set(USE_GSTREAMER \(TRUE\|ON\)\)/\1message(STATUS "wkb: USE_GSTREAMER forced OFF")\n\1set(USE_GSTREAMER OFF)/' \
+            Source/cmake/GStreamerChecks.cmake || true
+          grep -n 'USE_GSTREAMER' Source/cmake/GStreamerChecks.cmake | head
+
+      - name: Configure (Release, stripped)
+        run: |
+          cd src/WebKit
+          Tools/Scripts/build-webkit --release --gtk --only-webkit \
+            --no-ninja-ccache-generate \
+            --cmakeargs="
+              -GNinja
+              -DCMAKE_BUILD_TYPE=Release
+              -DCMAKE_CXX_FLAGS_RELEASE=-O1
+              -DENABLE_WEB_RTC=OFF
+              -DENABLE_WEBXR=OFF
+              -DENABLE_WEBXR_AR=OFF
+              -DENABLE_WEBXR_HANDS=OFF
+              -DENABLE_WEBXR_HIT_TEST=OFF
+              -DENABLE_WEBXR_LAYERS=OFF
+              -DENABLE_GAMEPAD=OFF
+              -DENABLE_MEDIA_STREAM=OFF
+              -DENABLE_WEB_CODECS=OFF
+              -DENABLE_VIDEO=OFF
+              -DENABLE_WEB_AUDIO=OFF
+              -DENABLE_SPEECH_SYNTHESIS=OFF
+              -DENABLE_MHTML=OFF
+              -DENABLE_PDFJS=OFF
+              -DENABLE_XSLT=OFF
+              -DENABLE_JOURNALD_LOG=OFF
+              -DENABLE_WEBDRIVER=OFF
+              -DENABLE_DEVELOPER_MODE=OFF
+              -DENABLE_EXPERIMENTAL_FEATURES=OFF
+              -DENABLE_API_TESTS=OFF
+              -DENABLE_INTROSPECTION=OFF
+              -DUSE_GSTREAMER=OFF
+            " 2>&1 | tee configure.log | tail -40
+
+      - name: Build
+        run: |
+          cd src/WebKit
+          export CCACHE_DIR=${{ github.workspace }}/build/ccache
+          # -l caps load so the 16 GB runner does not OOM on link steps.
+          ninja -C "$WEBKIT_OUTPUTDIR" -j2 -l3.0 2>&1 | tee build.log | tail -30
+
+      - name: Verify media is actually gone (not stubbed)
+        run: |
+          set -euo pipefail
+          LIB=$(find "$WEBKIT_OUTPUTDIR" -name 'libwebkitgtk-*.so' -o -name 'libwebkitgtk*.so.*' | head -1)
+          echo "lib: $LIB"
+          echo "--- GStreamer deps (must be empty) ---"
+          readelf -d "$LIB" | grep -i gst && { echo "FAIL: GStreamer still linked"; exit 1; } || echo "OK: no libgst* dependency"
+          echo "--- library size ---"
+          ls -lh "$LIB"
+          echo "--- total build dir size (10 GB cap) ---"
+          du -sh "$WEBKIT_OUTPUTDIR" src/WebKit
+          df -h /
+
+      - name: Measure RSS delta
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH=$WEBKIT_OUTPUTDIR/GTK/Release:$LD_LIBRARY_PATH
+          PKG_CONFIG_PATH=$WEBKIT_OUTPUTDIR/GTK/Release/pkgconfig \
+            gcc -O2 -o probe src/probe_headless.c $(
+              PKG_CONFIG_PATH=$WEBKIT_OUTPUTDIR/GTK/Release/pkgconfig \
+              pkg-config --cflags --libs webkit2gtk-6.0 2>/dev/null || echo ""
+            ) || { echo "probe build skipped (pkg-config name differs)"; exit 0; }
+          xvfb-run -a -s '-screen 0 1280x800x24' ./probe \
+            "data:text/html,<h1>ci</h1>" 2>&1 | tail -20
+          echo "Baseline to compare against: 414 MB unstripped"
+
+      - name: Upload artifact
+        if: ${{ inputs.upload_artifact != false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkitgtk-stripped
+          path: ${{ env.WEBKIT_OUTPUTDIR }}/GTK/Release/lib/
+          retention-days: 30

@@ -1,0 +1,45 @@
+# Build outputs — rebuilt by src/build.sh
+dist/wkbrowser
+dist/test_filechooser
+dist/probe_headless
+dist/*.o
+
+# Test artifacts and uploaded payloads (may contain real data)
+dist/upload_raw.bin
+dist/upload_result.txt
+dist/payload.txt
+dist/upload_form.html
+
+# Logs
+log/
+*.log
+
+# Local WebKit source/build trees (see research/budget.sh — 10 GB cap)
+build/
+src/WebKit/
+src/webkit-build/
+src/webkit-source/
+
+# ccache
+.ccache/
+src/ccache/
+
+# Editor / OS
+*.swp
+*~
+.DS_Store
+.vscode/
+.idea/
+compile_commands.json
+
+# Credentials — never commit
+*.pem
+*.key
+.env
+.env.*
+id_rsa*
+*_rsa
+*.p12
+*.pfx
+credentials.json
+gh-token

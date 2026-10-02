@@ -1,0 +1,7 @@
+# apt packages installed on behalf of this project
+# phase0: WPE 2.38.6 experiment (abandoned - cannot run headless)
+libwpewebkit-1.1-dev libwpe-1.0-dev libwpebackend-fdo-1.0-dev libegl1-mesa-dev pkg-config
+# phase0: WebKitGTK 2.50.6 (WORKING baseline)
+libwebkit2gtk-4.1-dev libgtk-3-dev xvfb
+# debugging
+gdb
