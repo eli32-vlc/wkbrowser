@@ -8,16 +8,14 @@ name: build-webkit-stripped
 # build flags change, so the Actions minutes budget is not burned per push.
 
 on:
+  # Manual dispatch only. An earlier revision also fired on push, which
+  # duplicated every dispatch and burned the free-tier minutes.
   workflow_dispatch:
     inputs:
       upload_artifact:
         description: Upload built library as artifact
         type: boolean
         default: true
-  push:
-    paths:
-      - '.github/workflows/build-webkit-stripped.yml'
-    branches: [main]
 
 concurrency:
   group: build-webkit
@@ -45,7 +43,13 @@ jobs:
       - name: Shallow clone WebKit (depth 1)
         # Full history is ~13 GB and would blow the 10 GB project cap by itself.
         run: |
+          # Pinned so a failure is reproducible. Bump deliberately rather
+          # than tracking main, which moves under you mid-build.
           git clone --depth 1 https://github.com/WebKit/WebKit.git src/WebKit
+          cd src/WebKit
+          git fetch --depth 1 origin 677d4d7c6bf8abd9367fbd7b46f349226f4a90e9
+          git checkout 677d4d7c6bf8abd9367fbd7b46f349226f4a90e9
+          cd ../..
           du -sh src/WebKit
 
       - name: Install build dependencies (apt, explicit)
