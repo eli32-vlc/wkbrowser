@@ -126,6 +126,20 @@ jobs:
               WPE)       sudo apt-get install -y libwayland-dev wayland-protocols ;;
               GLib)      sudo apt-get install -y libglib2.0-dev ;;
               GStreamer) sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ;;
+              LibBacktrace) sudo apt-get install -y libbacktrace-dev ;;
+              LittleCMS)    sudo apt-get install -y liblcms2-dev ;;
+              X11)          sudo apt-get install -y libx11-dev libxext-dev libxtst-dev ;;
+              Wayland)      sudo apt-get install -y libwayland-dev wayland-protocols ;;
+              EGL|GLES)     sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev ;;
+              Vulkan)       sudo apt-get install -y libvulkan-dev ;;
+              Fontconfig)   sudo apt-get install -y libfontconfig-dev ;;
+              Freetype)     sudo apt-get install -y libfreetype6-dev ;;
+              OpenSSL)      sudo apt-get install -y libssl-dev ;;
+              Libgcrypt)    sudo apt-get install -y libgcrypt20-dev ;;
+              SQLite)       sudo apt-get install -y libsqlite3-dev ;;
+              GTK)          sudo apt-get install -y libgtk-4-dev libgtk-3-dev ;;
+              Pango)        sudo apt-get install -y libpango1.0-dev ;;
+              Cairo)        sudo apt-get install -y libcairo2-dev ;;
               *) echo "no known package for $MISSING; stopping" && tail -30 /tmp/wkb-configure.log && exit 1 ;;
             esac
           done
