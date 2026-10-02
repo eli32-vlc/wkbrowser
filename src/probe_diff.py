@@ -24,6 +24,23 @@ PROFILE_MANAGED = {          # set by the profile, asserted separately
     "webdriver", "notif", "webgl",
 }
 
+# Fields whose value legitimately depends on the machine the browser runs on,
+# so a single baseline can never match everywhere. CI runs on ubuntu-latest,
+# the baseline was captured on Debian, and the only difference is the distro
+# token inside the UA string ("X11; Linux" vs "X11; Ubuntu"). These get a
+# structural check instead of an exact match.
+HOST_DEPENDENT = {
+    "ua",
+}
+
+# Must hold of a value regardless of host, so these vectors stay meaningful
+# instead of merely skipped.
+STRUCTURAL = {
+    # the engine identity and the Safari-60 anomaly are the entire reason
+    # ticket P2-4 exists, so keep asserting them
+    "ua": lambda v: "AppleWebKit" in v and "Version/60.5 Safari" in v,
+}
+
 
 def load(p):
     with open(p) as f:
@@ -52,6 +69,7 @@ def main():
         return 2
 
     ignore = VOLATILE | {k for k in args.ignore.split(",") if k}
+    host_dep = HOST_DEPENDENT - ignore
 
     diffs, missing = [], []
     for k, v in sorted(exp.items()):
@@ -59,6 +77,10 @@ def main():
             continue
         if k not in act:
             missing.append(k)
+        elif k in host_dep:
+            check = STRUCTURAL.get(k)
+            if check and not check(act[k]):
+                diffs.append((k, f"structural: {v!r}", act[k]))
         elif act[k] != v:
             diffs.append((k, v, act[k]))
     for k in sorted(act):
@@ -67,6 +89,8 @@ def main():
 
     print(f"probed {len(act)} vectors; asserting {len(exp) - len(ignore & set(exp))}")
     print(f"ignored as volatile: {', '.join(sorted(ignore)) or '(none)'}")
+    if host_dep:
+        print(f"host-dependent (structural check): {', '.join(sorted(host_dep))}")
 
     if missing:
         print(f"\nMISSING ({len(missing)}): " + ", ".join(missing))
