@@ -127,28 +127,54 @@ jobs:
       - name: Verify media is actually gone (not stubbed)
         run: |
           set -euo pipefail
-          LIB=$(find "$WEBKIT_OUTPUTDIR" -name 'libwebkitgtk-*.so' -o -name 'libwebkitgtk*.so.*' | head -1)
+          LIB=$(find "$WEBKIT_OUTPUTDIR" -name 'libwebkitgtk-*.so.*' -type f | head -1)
+          if [ -z "$LIB" ]; then
+            echo "FAIL: no libwebkitgtk shared object found under $WEBKIT_OUTPUTDIR"
+            echo "--- what was actually built ---"
+            find "$WEBKIT_OUTPUTDIR" -name '*.so*' | head -20
+            exit 1
+          fi
           echo "lib: $LIB"
           echo "--- GStreamer deps (must be empty) ---"
-          readelf -d "$LIB" | grep -i gst && { echo "FAIL: GStreamer still linked"; exit 1; } || echo "OK: no libgst* dependency"
+          if readelf -d "$LIB" | grep -i gst; then
+            echo "FAIL: GStreamer still linked"
+            exit 1
+          fi
+          echo "OK: no libgst* dependency"
           echo "--- library size ---"
           ls -lh "$LIB"
           echo "--- total build dir size (10 GB cap) ---"
           du -sh "$WEBKIT_OUTPUTDIR" src/WebKit
           df -h /
+          echo "OK: verification passed"
 
       - name: Measure RSS delta
         run: |
-          set -euo pipefail
-          export LD_LIBRARY_PATH=$WEBKIT_OUTPUTDIR/GTK/Release:$LD_LIBRARY_PATH
-          PKG_CONFIG_PATH=$WEBKIT_OUTPUTDIR/GTK/Release/pkgconfig \
-            gcc -O2 -o probe src/probe_headless.c $(
-              PKG_CONFIG_PATH=$WEBKIT_OUTPUTDIR/GTK/Release/pkgconfig \
-              pkg-config --cflags --libs webkit2gtk-6.0 2>/dev/null || echo ""
-            ) || { echo "probe build skipped (pkg-config name differs)"; exit 0; }
-          xvfb-run -a -s '-screen 0 1280x800x24' ./probe \
-            "data:text/html,<h1>ci</h1>" 2>&1 | tail -20
+          set -uo pipefail
+          RELEASEDIR="$WEBKIT_OUTPUTDIR/GTK/Release"
+          if [ ! -d "$RELEASEDIR" ]; then
+            echo "no $RELEASEDIR; skipping RSS measurement"
+            exit 0
+          fi
           echo "Baseline to compare against: 414 MB unstripped"
+          if [ -f "$RELEASEDIR/bin/MiniBrowser" ] || [ -f "$RELEASEDIR/Programs/MiniBrowser" ]; then
+            MB=$(find "$RELEASEDIR" -name 'MiniBrowser' -type f | head -1)
+            echo "launching $MB under xvfb with software GL to sample RSS"
+            LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+              xvfb-run -a -s '-screen 0 1280x800x24' \
+              timeout 30 "$MB" "data:text/html,<h1>ci</h1>" &
+            BGPID=$!
+            PEAK=0
+            for _ in $(seq 1 20); do
+              sleep 1
+              T=$(ps -eo rss,args | grep -iE '[M]iniBrowser|[W]ebKit' | awk '{s+=$1} END {print s+0}')
+              [ "${T:-0}" -gt "$PEAK" ] && PEAK=$T
+            done
+            kill $BGPID 2>/dev/null || true
+            echo "PEAK RSS: $((PEAK/1024)) MB (baseline 414 MB)"
+          else
+            echo "MiniBrowser not found in $RELEASEDIR; library-only build verified"
+          fi
 
       - name: Upload artifact
         if: ${{ inputs.upload_artifact != false }}
