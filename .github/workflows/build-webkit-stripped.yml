@@ -128,6 +128,13 @@ jobs:
                 # scraper, so the process sandbox is unnecessary weight.
                 ARGS="$ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF" ;;
               Unifdef)         PKG=unifdef ;;
+              Gettext|gettext)  PKG=gettext ;;
+              Bison)           PKG=bison ;;
+              Flex)            PKG=flex ;;
+              Gperf)           PKG=gperf ;;
+              Ninja)           PKG=ninja-build ;;
+              Perl)            PKG=perl ;;
+              Python)          PKG=python3-dev ;;
               JPEGXL)          PKG=libjxl-dev ;;
               AVIF)            PKG=libavif-dev ;;
               WebP)            PKG=libwebp-dev ;;
@@ -150,8 +157,19 @@ jobs:
               GStreamer)       PKG=libgstreamer1.0-dev ;;
               GLib)            PKG=libglib2.0-dev ;;
               *)
-                PKG=$(apt-cache search --names-only "lib${MISSING,,}-dev" 2>/dev/null \
-                      | head -1 | cut -d' ' -f1) ;;
+                # General fallback: try lib<name>-dev, then <name>, then
+                # anything apt knows containing the name.
+                LOW=${MISSING,,}
+                PKG=$(apt-cache search --names-only "lib${LOW}-dev" 2>/dev/null \
+                      | head -1 | cut -d' ' -f1)
+                if [ -z "$PKG" ]; then
+                  PKG=$(apt-cache search --names-only "$LOW" 2>/dev/null \
+                        | grep -E "^(lib)?${LOW}" | head -1 | cut -d' ' -f1)
+                fi
+                if [ -z "$PKG" ]; then
+                  PKG=$(apt-cache search "$LOW" 2>/dev/null \
+                        | grep -iE " - " | head -1 | cut -d' ' -f1)
+                fi ;; 
             esac
             if [ -n "$PKG" ]; then
               echo "installing $PKG for $MISSING"
