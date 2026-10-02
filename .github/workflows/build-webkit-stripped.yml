@@ -91,10 +91,9 @@ jobs:
 
       - name: Auto-install any missing optional libraries
         # Rather than burn a full runner per unknown optional dep, probe
-        # configure and retry once with whatever CMake just complained about.
+        # configure and retry, installing whatever CMake just complained about.
         run: |
           cd src/WebKit
-          ARGS_FILE=/tmp/wkb-cmake-args
           ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
           ARGS="$ARGS -DENABLE_WEB_RTC=OFF -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_HANDS=OFF -DENABLE_WEBXR_HIT_TEST=OFF"
@@ -106,64 +105,70 @@ jobs:
           ARGS="$ARGS -DENABLE_WEBDRIVER=OFF -DENABLE_DEVELOPER_MODE=OFF"
           ARGS="$ARGS -DENABLE_EXPERIMENTAL_FEATURES=OFF -DENABLE_API_TESTS=OFF"
           ARGS="$ARGS -DENABLE_INTROSPECTION=OFF -DUSE_GSTREAMER=OFF"
-          printf '%s' "$ARGS" > "$ARGS_FILE"
 
           for ATTEMPT in 1 2 3 4 5 6 7 8; do
             echo "===== configure attempt $ATTEMPT ====="
             if Tools/Scripts/build-webkit --release --gtk --only-webkit \
                  --cmakeargs="$ARGS" > /tmp/wkb-configure.log 2>&1; then
               echo "CONFIGURE_OK"
+              printf '%s' "$ARGS" > /tmp/wkb-final-args
               exit 0
             fi
-            MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log | head -1 | awk '{print $4}')
-            echo "missing package for: $MISSING"
+            MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log \
+                      | head -1 | awk '{print $4}')
+            echo "configure asked for: ${MISSING:-<none parsed>}"
+            PKG=""
             case "$MISSING" in
-              JPEGXL)   sudo apt-get install -y libjxl-dev ;;
-              AVIF)      sudo apt-get install -y libavif-dev ;;
-              WebP)      sudo apt-get install -y libwebp-dev ;;
-              HEIF)      sudo apt-get install -y libheif-dev ;;
-              LibSoup3|Soup3) sudo apt-get install -y libsoup-3.0-dev ;;
-              WPE)       sudo apt-get install -y libwayland-dev wayland-protocols ;;
-              GLib)      sudo apt-get install -y libglib2.0-dev ;;
-              GStreamer) sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ;;
-              # libbacktrace-dev is not packaged on Ubuntu/Debian. It only
-              # powers Release-build stack traces, so disable the feature.
-              LibBacktrace) echo "libbacktrace not packaged; disabling"; \
-                            ARGS="$ARGS -DUSE_LIBBACKTRACE=OFF"; \
-                            printf '%s' "$ARGS" > "$ARGS_FILE" ;;
-              LittleCMS)    sudo apt-get install -y liblcms2-dev ;;
-              X11)          sudo apt-get install -y libx11-dev libxext-dev libxtst-dev ;;
-              Wayland)      sudo apt-get install -y libwayland-dev wayland-protocols ;;
-              EGL|GLES)     sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev ;;
-              Vulkan)       sudo apt-get install -y libvulkan-dev ;;
-              Fontconfig)   sudo apt-get install -y libfontconfig-dev ;;
-              Freetype)     sudo apt-get install -y libfreetype6-dev ;;
-              OpenSSL)      sudo apt-get install -y libssl-dev ;;
-              Libgcrypt)    sudo apt-get install -y libgcrypt20-dev ;;
-              SQLite)       sudo apt-get install -y libsqlite3-dev ;;
-              GTK)          sudo apt-get install -y libgtk-4-dev libgtk-3-dev ;;
-              Pango)        sudo apt-get install -y libpango1.0-dev ;;
-              Cairo)        sudo apt-get install -y libcairo2-dev ;;
-              Unifdef)      sudo apt-get install -y unifdef ;;  # required to build WebKit itself
-              # Sandbox libs are irrelevant to a single-user headless scraper.
-              Libseccomp)   echo "seccomp not packaged; disabling bubblewrap sandbox"; \
-                            ARGS="$ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF"; \
-                            printf '%s' "$ARGS" > "$ARGS_FILE" ;;
-              bubblewrap|Bubblewrap) \
-                            ARGS="$ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF"; \
-                            printf '%s' "$ARGS" > "$ARGS_FILE" ;;
-              "") echo "nothing to install" ;;
-              # Last resort: let apt search, so a guess is not required.
-              *) PKG=$(apt-cache search --names-only "lib${MISSING,,}-dev" 2>/dev/null | head -1 | cut -d' ' -f1) ;;
-              esac
-              if [ -z "${PKG:-}" ]; then
-                echo "no known package for $MISSING; stopping"
-                tail -30 /tmp/wkb-configure.log; exit 1
-              fi
-              echo "auto-resolved $MISSING -> $PKG"
-              sudo apt-get install -y "$PKG" ;;
+              LibBacktrace)
+                # Not packaged on Ubuntu or Debian; only powers Release-build
+                # stack traces, so turn the feature off instead.
+                ARGS="$ARGS -DUSE_LIBBACKTRACE=OFF" ;;
+              Libseccomp|bubblewrap|Bubblewrap)
+                # No multi-tenant threat model in a single-user headless
+                # scraper, so the process sandbox is unnecessary weight.
+                ARGS="$ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF" ;;
+              Unifdef)         PKG=unifdef ;;
+              JPEGXL)          PKG=libjxl-dev ;;
+              AVIF)            PKG=libavif-dev ;;
+              WebP)            PKG=libwebp-dev ;;
+              HEIF)            PKG=libheif-dev ;;
+              LittleCMS)       PKG=liblcms2-dev ;;
+              LibSoup3|Soup3)  PKG=libsoup-3.0-dev ;;
+              Soup)            PKG=libsoup-3.0-dev ;;
+              WPE|Wayland)     PKG=libwayland-dev ;;
+              X11)             PKG=libx11-dev ;;
+              EGL|GLES)        PKG=libegl1-mesa-dev ;;
+              Vulkan)          PKG=libvulkan-dev ;;
+              Fontconfig)      PKG=libfontconfig-dev ;;
+              Freetype)        PKG=libfreetype6-dev ;;
+              OpenSSL)         PKG=libssl-dev ;;
+              Libgcrypt)       PKG=libgcrypt20-dev ;;
+              SQLite)          PKG=libsqlite3-dev ;;
+              GTK)             PKG=libgtk-4-dev ;;
+              Pango)           PKG=libpango1.0-dev ;;
+              Cairo)           PKG=libcairo2-dev ;;
+              GStreamer)       PKG=libgstreamer1.0-dev ;;
+              GLib)            PKG=libglib2.0-dev ;;
+              *)
+                PKG=$(apt-cache search --names-only "lib${MISSING,,}-dev" 2>/dev/null \
+                      | head -1 | cut -d' ' -f1) ;;
+            esac
+            if [ -n "$PKG" ]; then
+              echo "installing $PKG for $MISSING"
+              sudo apt-get install -y "$PKG" || true
+            fi
+            if [ "$MISSING" = "LibBacktrace" ] || [ "$MISSING" = "Libseccomp" ] \
+               || [ "$MISSING" = "bubblewrap" ] || [ "$MISSING" = "Bubblewrap" ]; then
+              echo "flag changed, will retry with adjusted args"
+            elif [ -z "$PKG" ]; then
+              echo "no package known for $MISSING; stopping"
+              tail -30 /tmp/wkb-configure.log
+              exit 1
+            fi
           done
-          echo "configure did not converge"; tail -40 /tmp/wkb-configure.log; exit 1
+          echo "configure did not converge in 8 attempts"
+          tail -40 /tmp/wkb-configure.log
+          exit 1
 
       - name: Patch GStreamer so USE_GSTREAMER=OFF actually sticks
         # Upstream PR #61274: USE_GSTREAMER is unconditionally forced back to
