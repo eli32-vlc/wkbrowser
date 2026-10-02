@@ -94,7 +94,12 @@ jobs:
         # configure and retry, installing whatever CMake just complained about.
         run: |
           cd src/WebKit
-          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1 -DCMAKE_CXX_FLAGS=-Wno-ignored-attributes"
+          # WebKit main targets a newer clang than ubuntu-24.04 ships, and its
+          # own -Werror promotes these to hard failures. Suppress via CXXFLAGS
+          # rather than -D: build-webkit word-splits --cmakeargs, which would
+          # orphan any flag containing a space.
+          export CXXFLAGS="-Wno-error=ignored-attributes -Wno-error=pass-failed -Wno-error=pass-failed=transform-warning"
+          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
           ARGS="$ARGS -DENABLE_WEB_RTC=OFF -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_HANDS=OFF -DENABLE_WEBXR_HIT_TEST=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_LAYERS=OFF -DENABLE_GAMEPAD=OFF"
