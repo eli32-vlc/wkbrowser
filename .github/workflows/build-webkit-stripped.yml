@@ -94,6 +94,7 @@ jobs:
           restore-keys: webkit-stripped-
 
       - name: Auto-install any missing optional libraries
+        timeout-minutes: 90
         # Rather than burn a full runner per unknown optional dep, probe
         # configure and retry, installing whatever CMake just complained about.
         run: |
@@ -117,6 +118,10 @@ jobs:
 
           for ATTEMPT in 1 2 3 4 5 6 7 8; do
             echo "===== configure attempt $ATTEMPT ====="
+            # Stream progress to the job summary; a 5h job with no output
+            # cannot be diagnosed after the fact.
+            echo "### configure attempt $ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+            date -u '+%H:%M:%S attempting configure' >> "$GITHUB_STEP_SUMMARY"
             if Tools/Scripts/build-webkit --release --gtk --only-webkit \
                  --cmakeargs="$ARGS" > /tmp/wkb-configure.log 2>&1; then
               echo "CONFIGURE_OK"
@@ -125,7 +130,7 @@ jobs:
             fi
             MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log \
                       | head -1 | awk '{print $4}')
-            echo "configure asked for: ${MISSING:-<none parsed>}"
+            echo "configure asked for: ${MISSING:-<none parsed>}" | tee -a "$GITHUB_STEP_SUMMARY"
             if [ -z "$MISSING" ]; then
               echo "configure failed for a reason other than a missing library"
               tail -40 /tmp/wkb-configure.log
