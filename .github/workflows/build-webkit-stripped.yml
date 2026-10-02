@@ -42,28 +42,46 @@ jobs:
                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
           df -h /
 
+      - name: Shallow clone WebKit (depth 1)
+        # Full history is ~13 GB and would blow the 10 GB project cap by itself.
+        run: |
+          git clone --depth 1 https://github.com/WebKit/WebKit.git src/WebKit
+          du -sh src/WebKit
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
+          # Ask WebKit itself for the GTK-port dependency list, then add the
+          # generic toolchain. Guessing package names one CMake error at a
+          # time wastes a full runner per missing library.
+          ./src/WebKit/Tools/Scripts/install-dependencies --gtk 2>&1 | tail -20 \
+            || sudo apt-get install -y --no-install-recommends \
+                 libtasn1-6-dev libjansson-dev
+
+      - name: Install toolchain and media-adjacent headers
+        run: |
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build ccache gperf bison flex \
             python3 python3-dev git wget ca-certificates \
             libgcrypt20-dev libssl-dev libicu-dev libwoff-dev \
-            libopus-dev libwebp-dev libwebpdemux2 libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
-            libenchant-2-dev libhyphen-dev libmanette-0.2-dev \
-            libgles2-mesa-dev libegl1-mesa-dev libglib2.0-dev \
-            libx11-dev libxext-dev libxi-dev libxtst-dev \
-            libcairo2-dev libpango1.0-dev libatk1.0-dev libatk-bridge2.0-dev \
-            libgtk-3-dev libgdk-pixbuf-2.0-dev libepoxy-dev \
-            libwayland-dev wayland-protocols libdrm-dev libgbm-dev \
-            libavif-dev libjpeg-dev libopenjp2-7-dev libtiff-dev \
+            libwebp-dev libavif-dev libjpeg-dev libopenjp2-7-dev \
             libsecret-1-dev libnotify-dev libjsoncpp-dev \
-            libsoup-3.0-dev libpsl-dev \
-            xvfb gir1.2-gtk-3.0
-          # NOTE: no gir1.2-webkit2-6.0 here. We build libwebkit ourselves, and
-          # the Ubuntu runner does not package that introspection name. GTK3 is
-          # the port being built, so gir1.2-gtk-3.0 is the correct dep.
+            libopus-dev libhyphen-dev \
+            libcairo2-dev libpango1.0-dev libatk1.0-dev \
+            libatk-bridge2.0-dev libgtk-3-dev libgdk-pixbuf-2.0-dev \
+            libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev \
+            libx11-dev libxext-dev libxi-dev libxtst-dev \
+            libwayland-dev wayland-protocols libdrm-dev libgbm-dev \
+            libsoup-3.0-dev libpsl-dev libtasn1-6-dev libjansson-dev \
+            xvfb gir1.2-gtk-3.0 \
+            || { echo "WARN: some optional packages unavailable on this runner"; \
+                 sudo apt-get install -y --no-install-recommends \
+                   build-essential cmake ninja-build ccache gperf bison flex \
+                   python3 python3-dev git ca-certificates \
+                   libgcrypt20-dev libssl-dev libicu-dev libwoff-dev \
+                   libwebp-dev libsecret-1-dev libjsoncpp-dev \
+                   libgtk-3-dev libcairo2-dev libpango1.0-dev \
+                   libsoup-3.0-dev libtasn1-6-dev xvfb; }
 
       - uses: actions/cache@v4
         with:
@@ -72,12 +90,6 @@ jobs:
             src/WebKit/WebKitBuild
           key: webkit-stripped-${{ hashFiles('.github/workflows/build-webkit-stripped.yml') }}
           restore-keys: webkit-stripped-
-
-      - name: Shallow clone WebKit (depth 1)
-        # Full history is ~13 GB and would blow the 10 GB project cap by itself.
-        run: |
-          git clone --depth 1 https://github.com/WebKit/WebKit.git src/WebKit
-          du -sh src/WebKit
 
       - name: Patch GStreamer so USE_GSTREAMER=OFF actually sticks
         # Upstream PR #61274: USE_GSTREAMER is unconditionally forced back to
