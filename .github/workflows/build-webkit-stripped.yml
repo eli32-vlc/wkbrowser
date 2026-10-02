@@ -86,36 +86,33 @@ jobs:
 
       - name: Configure (Release, stripped)
         run: |
+          set -euo pipefail
           cd src/WebKit
+          # NOTE: pass cmakeargs on ONE line. A multi-line YAML folded string
+          # gets flattened to spaces with no continuation, so every flag after
+          # the first is read as a separate shell command.
+          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
+          ARGS="$ARGS -DENABLE_WEB_RTC=OFF"
+          ARGS="$ARGS -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF -DENABLE_WEBXR_HANDS=OFF"
+          ARGS="$ARGS -DENABLE_WEBXR_HIT_TEST=OFF -DENABLE_WEBXR_LAYERS=OFF"
+          ARGS="$ARGS -DENABLE_GAMEPAD=OFF -DENABLE_MEDIA_STREAM=OFF"
+          ARGS="$ARGS -DENABLE_WEB_CODECS=OFF -DENABLE_VIDEO=OFF -DENABLE_WEB_AUDIO=OFF"
+          ARGS="$ARGS -DENABLE_SPEECH_SYNTHESIS=OFF -DENABLE_MHTML=OFF"
+          ARGS="$ARGS -DENABLE_PDFJS=OFF -DENABLE_XSLT=OFF -DENABLE_JOURNALD_LOG=OFF"
+          ARGS="$ARGS -DENABLE_WEBDRIVER=OFF -DENABLE_DEVELOPER_MODE=OFF"
+          ARGS="$ARGS -DENABLE_EXPERIMENTAL_FEATURES=OFF -DENABLE_API_TESTS=OFF"
+          ARGS="$ARGS -DENABLE_INTROSPECTION=OFF -DUSE_GSTREAMER=OFF"
+          echo "cmake args: $ARGS"
           Tools/Scripts/build-webkit --release --gtk --only-webkit \
-            --no-ninja-ccache-generate \
-            --cmakeargs="
-              -GNinja
-              -DCMAKE_BUILD_TYPE=Release
-              -DCMAKE_CXX_FLAGS_RELEASE=-O1
-              -DENABLE_WEB_RTC=OFF
-              -DENABLE_WEBXR=OFF
-              -DENABLE_WEBXR_AR=OFF
-              -DENABLE_WEBXR_HANDS=OFF
-              -DENABLE_WEBXR_HIT_TEST=OFF
-              -DENABLE_WEBXR_LAYERS=OFF
-              -DENABLE_GAMEPAD=OFF
-              -DENABLE_MEDIA_STREAM=OFF
-              -DENABLE_WEB_CODECS=OFF
-              -DENABLE_VIDEO=OFF
-              -DENABLE_WEB_AUDIO=OFF
-              -DENABLE_SPEECH_SYNTHESIS=OFF
-              -DENABLE_MHTML=OFF
-              -DENABLE_PDFJS=OFF
-              -DENABLE_XSLT=OFF
-              -DENABLE_JOURNALD_LOG=OFF
-              -DENABLE_WEBDRIVER=OFF
-              -DENABLE_DEVELOPER_MODE=OFF
-              -DENABLE_EXPERIMENTAL_FEATURES=OFF
-              -DENABLE_API_TESTS=OFF
-              -DENABLE_INTROSPECTION=OFF
-              -DUSE_GSTREAMER=OFF
-            " 2>&1 | tee configure.log | tail -40
+            --cmakeargs="$ARGS" 2>&1 | tee configure.log | tail -40
+          # Prove the flags actually took effect, do not trust exit status.
+          echo "--- cache verification ---"
+          CFG=WebKitBuild/GTK/Release/CMakeCache.txt
+          for K in USE_GSTREAMER ENABLE_WEB_RTC ENABLE_MEDIA_STREAM ENABLE_WEB_CODECS; do
+            printf '%-24s %s\n' "$K" "$(grep -E "^$K:" "$CFG" || echo 'ABSENT')"
+          done
+          echo "--- build dir created? ---"
+          find . -maxdepth 2 -name 'WebKitBuild*' -type d
 
       - name: Build
         run: |
