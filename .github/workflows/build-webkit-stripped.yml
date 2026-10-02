@@ -126,7 +126,11 @@ jobs:
               WPE)       sudo apt-get install -y libwayland-dev wayland-protocols ;;
               GLib)      sudo apt-get install -y libglib2.0-dev ;;
               GStreamer) sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ;;
-              LibBacktrace) sudo apt-get install -y libbacktrace-dev ;;
+              # libbacktrace-dev is not packaged on Ubuntu/Debian. It only
+              # powers Release-build stack traces, so disable the feature.
+              LibBacktrace) echo "libbacktrace not packaged; disabling"; \
+                            ARGS="$ARGS -DENABLE_BACKTRACE=OFF"; \
+                            printf '%s' "$ARGS" > "$ARGS_FILE" ;;
               LittleCMS)    sudo apt-get install -y liblcms2-dev ;;
               X11)          sudo apt-get install -y libx11-dev libxext-dev libxtst-dev ;;
               Wayland)      sudo apt-get install -y libwayland-dev wayland-protocols ;;
