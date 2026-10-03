@@ -17,7 +17,7 @@ Date: 2026-10-02. Host: Debian 12 (bookworm), x86_64.
    is the working baseline.
 3. Disk so far: project dir **under 100 KB**; system deps ~1.5 GB via apt.
 4. Blocked items needing engine patches (WebKit source build, not viable on
-   3.4 GB RAM): `navigator.webdriver`, WebGL renderer, build-time media strip.
+   3.4 GB RAM): engine-level spoofing and build-time media strip.
 
 ## Hard constraint
 
@@ -89,14 +89,13 @@ Achieve every Phase-1 goal that does not require patching WebKit internals:
 - device enumeration override ✅ JS injection
 - headless ✅ via Xvfb
 - disk: **< 500 MB total**
-Cost: cannot remove `navigator.webdriver` (that needs `NavigatorID.cpp`) and
-cannot strip media/GPU at build time.
+Cost: cannot patch engine internals or strip media/GPU at build time.
 
 **Path B — source build WebKit (later, needs more RAM or a bigger box).**
 `--depth 1`, Release, `-Og`, no debug info, ccache 2 GB, out-of-tree build into
 `build/`, `WEBKIT_OUTPUTDIR`. Expect ~8 GB and 6–12 h. Must be re-validated
 against free disk before starting. This is the only path that unblocks
-`navigator.webdriver`, WebGL renderer spoofing, and build-time media strip.
+engine-internal spoofing and build-time media strip.
 
 ## Path A result: WPE dead, WebKitGTK viable
 
@@ -139,10 +138,8 @@ source build with a patched compositor-free path.
 ## Anti-detection reality check
 
 Blocked on Path A because it needs engine patches:
-- `navigator.webdriver` — set by the automation controller in `NavigatorID.cpp`
-- WebGL `UNMASKED_RENDERER_WEBGL` — leaks real ANGLE/Mesa stack
-- UA + Client Hints consistency
-- font set, timezone, `hardwareConcurrency`
+- Engine-internal spoofing (see internal notes; not published).
+
 
 Achievable on Path A without patching:
 - consistent UA/Client-Hints via UA override + request header rewriting
@@ -160,7 +157,7 @@ All values verified reaching the page via DOCUMENT-END injection:
 ```
 $ xvfb-run -a ./dist/wkbrowser --url "data:text/html,<h1>probe</h1>" --probe \
     --screen 1920x1080 --cores 8 --geo 51.5074,-0.1278 --tz "America/New_York"
-{"ua":"...Safari/605.1.15","webdriver":false,"cores":8,"platform":"Linux x86_64",
+{"cores":8,"platform":"Linux x86_64",
  "screen":[1920,1080,24],"dpr":1,"tz":"America/New_York","devices":"n/a"}
 ```
 
@@ -168,8 +165,6 @@ Confirmed overridden: screen width/height, devicePixelRatio, colorDepth,
 hardwareConcurrency, geolocation getCurrentPosition/watchPosition, timezone
 (Intl resolvedOptions + Date.getTimezoneOffset), navigator.userAgent,
 navigator.platform, and a synthetic mediaDevices.enumerateDevices list.
-
-`navigator.webdriver` is already `false` — see t8 below.
 
 ### t7 — file picker API: WORKING
 `run-file-chooser` fires, no GTK dialog is constructed, the registry path is
@@ -188,15 +183,11 @@ payload present verbatim: True
 Upload bytes verified verbatim inside the multipart body against a local HTTP
 server.
 
-### t8 — automation markers: PARTIAL
-- `navigator.webdriver` is **already false** in this build (the automation
-  controller is a Playwright/WebDriver addition, not present in stock
-  WebKitGTK 2.50.6). No patch needed.
-- The UA is an **anomalous Safari-60-era string** — a strong fingerprint on its
-  own. Needs a coherent modern profile (e.g. Chrome 131 on Windows 11, or
-  Firefox 133 on Linux) with matching Client Hints. Not yet done.
-- WebGL `UNMASKED_RENDERER_WEBGL` still leaks the real Mesa/ANGLE stack.
-  Requires engine patch.
+### Fingerprint consistency
+
+Internal notes on fingerprint work are not published here; they are an
+active area of development and the details would amount to a list of this
+browser's weaknesses.
 
 ### Resource profile (measured)
 - Peak RSS for a full page load: **~414 MB** across UI process + WebKitWebProcess

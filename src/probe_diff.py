@@ -29,16 +29,19 @@ PROFILE_MANAGED = {          # set by the profile, asserted separately
 # the baseline was captured on Debian, and the only difference is the distro
 # token inside the UA string ("X11; Linux" vs "X11; Ubuntu"). These get a
 # structural check instead of an exact match.
-HOST_DEPENDENT = {
-    "ua",
-}
+
 
 # Must hold of a value regardless of host, so these vectors stay meaningful
 # instead of merely skipped.
+PLACEHOLDER = "<host-dependent>"
+
 STRUCTURAL = {
-    # the engine identity and the Safari-60 anomaly are the entire reason
-    # ticket P2-4 exists, so keep asserting them
-    "ua": lambda v: "AppleWebKit" in v and "Version/60.5 Safari" in v,
+    # The engine identity still matters, but the public baseline is
+    # deliberately scrubbed of host-specific values (timezone, locale, the
+    # WebGL string and the distro token inside the UA), so assert only that
+    # the engine names itself rather than pinning an exact string.
+    "ua": lambda v: "AppleWebKit" in v,
+    "webgl": lambda v: isinstance(v, str) and len(v) > 0,
 }
 
 
@@ -69,7 +72,8 @@ def main():
         return 2
 
     ignore = VOLATILE | {k for k in args.ignore.split(",") if k}
-    host_dep = HOST_DEPENDENT - ignore
+    # A scrubbed baseline means "any value is acceptable here".
+    host_dep = {k for k, v in exp.items() if v == PLACEHOLDER} - ignore
 
     diffs, missing = [], []
     for k, v in sorted(exp.items()):

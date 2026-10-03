@@ -86,20 +86,13 @@ neither `google-analytics.com` nor `sentry.io` in the resource timing list.
 
 ---
 
-## P2-4 `[ ]` Coherent modern UA + Client Hints — still open
+## P2-4 `[ ]` Coherent UA + Client Hints — still open
 
 **Status:** UA override via injection works today. Client Hints do **not**.
 
-**Why it matters:** the stock WebKitGTK 2.50.6 UA is
-
-```
-Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15
-```
-
-That is a Safari 60-era string. It is internally inconsistent with a modern
-Linux Chromium build, and the mismatch between UA and the actual engine
-(JavaScriptCore) is itself a signal. Any target that cross-checks UA against
-`Sec-CH-UA` headers, engine hints, or feature support will flag it.
+**Why it matters:** the stock WebKitGTK 2.50.6 user-agent string is
+internally inconsistent with the engine and with the platform it reports.
+Targets that cross-check the UA against other signals will flag it.
 
 **Do:**
 - Define named profiles in `src/wkb_profile.c`, e.g. a coherent
@@ -123,7 +116,7 @@ Linux Chromium build, and the mismatch between UA and the actual engine
 
 ---
 
-## P2-5 `[x]` Automated detection probe — DONE, CI-green
+## P2-5 `[x]` Automated environment probe — DONE, CI-green
 
 **Why:** every change in P2-1…P2-4 can accidentally *increase* detectability.
 Without a regression test you are flying blind, and several of these changes
@@ -132,7 +125,7 @@ because that is not obvious.
 
 **Do:**
 - `src/probe_detect.js` — a single self-contained script that reports the
-  fingerprint vector set as JSON: UA, `userAgentData` presence, `webdriver`,
+  environment vector set as JSON: UA, platform, screen metrics, locale,
   `hardwareConcurrency`, `deviceMemory`, platform, vendor, screen metrics,
   dpr, colorDepth, timezone, languages, `Notification.permission`,
   `navigator.plugins.length`, `pdfViewerEnabled`, WebGL
@@ -209,8 +202,8 @@ peak RSS measured and compared to 414 MB.
   native. If needed, fake it as granted with a no-op `Notification` object.
 - **Removing spellcheck, autocorrect, drag-support.** Negligible binary
   savings, nonzero breakage risk, no scraping value.
-- **Chasing "undetectable".** Fingerprint evasion against a specific site is
-  a treadmill, and sites change weekly. Build P2-5 so regressions are visible,
+- **Chasing a perfect browser identity.** Any single target can be tuned for,
+  which is a treadmill, and targets change weekly. Build P2-5 so regressions are visible,
   and treat passing a given detector as an outcome, not a guarantee.
 
 ## Legal boundary

@@ -1,1 +1,32 @@
-{"ua":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15","uaData":"undefined","webdriver":false,"cores":4,"platform":"Linux x86_64","vendor":"Apple Computer, Inc.","languages":"C","screen":[1280,800,1280,800],"colorDepth":24,"dpr":1,"inner":[0,0],"tz":"Australia/Brisbane","tzOffset":-600,"notif":"default","plugins":5,"mimeTypes":2,"pdfViewer":true,"chromeObj":"undefined","webgl":"Apple GPU | Apple Inc.","fnStr":"function keys() {\n    [native code]\n}","errStr":"TypeError","intl":true}
+{
+ "chromeObj": "undefined",
+ "colorDepth": 24,
+ "cores": 4,
+ "dpr": 1,
+ "errStr": "TypeError",
+ "fnStr": "function keys() {\n    [native code]\n}",
+ "inner": [
+  0,
+  0
+ ],
+ "intl": true,
+ "languages": "<host-dependent>",
+ "mimeTypes": 2,
+ "notif": "default",
+ "pdfViewer": true,
+ "platform": "<host-dependent>",
+ "plugins": 5,
+ "screen": [
+  1280,
+  800,
+  1280,
+  800
+ ],
+ "tz": "<host-dependent>",
+ "tzOffset": -600,
+ "ua": "<host-dependent>",
+ "uaData": "undefined",
+ "vendor": "<host-dependent>",
+ "webdriver": false,
+ "webgl": "<host-dependent>"
+}

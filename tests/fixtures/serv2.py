@@ -37,4 +37,5 @@ if __name__=='__main__':
     with socketserver.TCPServer(('127.0.0.1',port),H) as srv:
         print(f"[s2] port={srv.server_address[1]}",flush=True)
         open('/tmp/wkb_port','w').write(str(srv.server_address[1]))
+        open('/tmp/wkb_probe_port','w').write(str(srv.server_address[1]))
         srv.serve_forever()

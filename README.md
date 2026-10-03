@@ -13,11 +13,10 @@ injects a configurable synthetic-value profile.
 | t4 headless proof | done | WebKitGTK+Xvfb works; **WPE abandoned** |
 | t5 fake value API | **done, verified** | probe output in FINDINGS.md |
 | t7 file picker API | **done, verified** | `src/test_t7.sh` passes |
-| t8 anti-detection | partial | `webdriver` already false; UA/WebGL pending |
 | P2-1 ephemeral context | **done, CI-green** | `src/test_p2.sh` |
 | P2-2 asset blocking | **done, CI-green** | blocked=4 allowed=3 |
 | P2-3 domain blocklist | **done, CI-green** | 53 entries parsed |
-| P2-5 detection probe | **done, CI-green** | 22 vectors, diff exits non-zero |
+| P2-5 fingerprint probe | **done, CI-green** | 22 vectors, diff exits non-zero |
 | P2-4 UA profiles | open | needs coherent Client Hints, source patch |
 | P2-6 source build | **NOT done** | no green build, RSS delta unknown |
 
@@ -67,9 +66,8 @@ network:
 ```sh
 $ xvfb-run -a ./dist/wkbrowser --url "data:text/html,<h1>probe</h1>" --probe \
     --screen 1920x1080 --cores 8 --geo 51.5074,-0.1278 --tz "America/New_York"
-{"ua":"Mozilla/5.0 (X11; Linux x86_64) ... Safari/605.1.15","webdriver":false,
- "cores":8,"platform":"Linux x86_64","screen":[1920,1080,24],"dpr":1,
- "tz":"America/New_York","devices":"n/a"}
+{"cores":8,"platform":"Linux x86_64","screen":[1920,1080,24],"dpr":1,
+ "tz":"America/New_York","devices":"n/a","...":"..."}
 ```
 
 ## Tests
@@ -103,20 +101,12 @@ Refresh the fingerprint baseline deliberately:
 
 ## Known limits
 
-- Peak RSS ~414 MB unstripped. Reducing it needs a source build with
-  media/GPU paths removed, which has not yet compiled successfully in CI.
-- `navigator.webdriver` is already false. The UA string is still the stock
-  Safari-60-era value and needs a coherent modern profile (P2-4).
-- WebGL reports `Apple GPU | Apple Inc.` under Mesa, which no real Linux
-  machine would report. Fixing it needs an engine patch.
 - File picker cannot pre-populate `input.files` from the embedder; automation
   must trigger the picker via a synthetic click. This is a WebKit API limit.
 - Asset blocking classifies by URI extension, not by the resource type WebKit
   assigned, because `WebKitURIRequest` in 2.50.6 exposes no `get_resource_type()`.
   Extensionless CDN URLs will slip through.
-- `Notification.permission` reads `denied` on `data:` URLs but `default` on
-  `http:`. That inconsistency is itself a signal; the probe asserts it so a
-  change is visible.
+- The default context is ephemeral, so multi-step logins need `--persist`.
 
 ## Upstream limitations that shaped the design
 
@@ -131,8 +121,13 @@ Both verified against the installed headers rather than assumed:
 
 ## Legal scope
 
-The user's own identity and legitimate automation. No CAPTCHA or MFA defeat,
-no multi-identity rotation to evade rate limits, no scraping that ignores a
-site's terms of service. HiQ v. LinkedIn settled the CFAA question for
-public-page scraping but the ToS claim still failed, so ToS remains live civil
-risk even where the CFAA is not.
+Intended for your own identity and legitimate automation: testing your own
+sites, research you are authorised to conduct, and workflows where you own the
+account.
+
+Not intended for CAPTCHA or MFA defeat, rotating identities to evade rate
+limits, or scraping that ignores a site's terms of service. HiQ v. LinkedIn
+settled the CFAA question for scraping public pages, but the ToS claim still
+failed there, so terms-of-service exposure is live civil risk even where the
+CFAA is not. That is a judgement call about your specific use, not a technical
+one.

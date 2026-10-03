@@ -32,6 +32,17 @@ src/ccache/
 .idea/
 compile_commands.json
 
+# Test artifacts that must never be committed: an uploaded raw multipart
+# body can contain real user data if the fixture is ever pointed at a real
+# target, and the local fingerprint is host-specific.
+upload_raw.bin
+upload_result.txt
+dist/serv2.py
+dist/testpage.html
+dist/testserver.py
+dist/verify_upload.py
+tests/actual_fingerprint.json
+
 # Credentials — never commit
 *.pem
 *.key

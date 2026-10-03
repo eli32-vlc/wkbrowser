@@ -14,7 +14,7 @@ fail() { echo "FAIL $1"; FAIL=1; }
 cleanup() { [ -n "${SRV:-}" ] && kill "$SRV" 2>/dev/null; }
 trap cleanup EXIT
 
-python3 dist/serv2.py "$PORT" > log/s2.log 2>&1 &
+python3 tests/fixtures/serv2.py "$PORT" > log/s2.log 2>&1 &
 SRV=$!
 for _ in $(seq 1 40); do
   curl -s -o /dev/null "http://127.0.0.1:$PORT/testpage.html" && break
