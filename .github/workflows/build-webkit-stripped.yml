@@ -353,10 +353,29 @@ jobs:
 
           PCC=$(find "$BUILDDIR" -name 'webkitgtk-6.0.pc' | head -1)
           if [ -n "$PCC" ]; then
-            export PKG_CONFIG_PATH="$(dirname "$PCC"):${PKG_CONFIG_PATH:-}"
+            # Prepend, never replace: WebKit's .pc resolves its Requires
+            # through pkg-config, so clobbering PKG_CONFIG_PATH hides the
+            # system glib/gio/gtk .pc files and --cflags comes back without
+            # them. That is why the build failed on 'glib.h: No such file'.
+            export PKG_CONFIG_PATH="$(dirname "$PCC")${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+            mkdir -p dist
+            CFLAGS=$(pkg-config --cflags webkitgtk-6.0)
+            if [ -z "$CFLAGS" ]; then
+              echo "FAIL: pkg-config returned no cflags for webkitgtk-6.0"
+              pkg-config --exists webkitgtk-6.0 \
+                && echo "  package found but Requires are unresolvable" \
+                || echo "  package not found on PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+              exit 1
+            fi
+            echo "cflags: $CFLAGS"
+            echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+            echo "glib.h present: $(ls /usr/include/glib-2.0/glib.h 2>/dev/null || echo NO)"
+            pkg-config --print-errors --cflags webkitgtk-6.0 2>&1 | head -5 || true
+            echo "--- webkitgtk-6.0.pc contents ---"
+            sed -n '1,12p' "$PCC"
             if gcc -O2 -o dist/wkb-ci src/wkbrowser.c src/wkb_profile.c \
                    src/wkb_files.c src/wkb_net.c src/wkb_probe.c \
-                   $(pkg-config --cflags webkitgtk-6.0) \
+                   $CFLAGS \
                    $(pkg-config --libs webkitgtk-6.0) 2>build-embedder.log; then
               echo "embedder built against the stripped library"
               export LD_LIBRARY_PATH="$LIBDIR:$LD_LIBRARY_PATH"
