@@ -101,31 +101,31 @@ jobs:
           # No cd here: paths below are relative to the workspace root.
           # An earlier revision did `cd src/WebKit` then passed -S src/WebKit,
           # which resolved to src/WebKit/src/WebKit.
-          # WebKit main targets a newer clang than ubuntu-24.04 ships, and its
-          # own -Werror promotes these to hard failures. Suppress via CXXFLAGS
-          # rather than -D: build-webkit word-splits --cmakeargs, which would
-          # orphan any flag containing a space.
-          export CXXFLAGS="-Wno-error=ignored-attributes -Wno-error=pass-failed"
-          ARGS="-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
-          ARGS="$ARGS -DENABLE_WEB_RTC=OFF -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF"
-          ARGS="$ARGS -DENABLE_WEBXR_HANDS=OFF -DENABLE_WEBXR_HIT_TEST=OFF"
-          ARGS="$ARGS -DENABLE_WEBXR_LAYERS=OFF -DENABLE_GAMEPAD=OFF"
-          ARGS="$ARGS -DENABLE_MEDIA_STREAM=OFF -DENABLE_WEB_CODECS=OFF"
-          ARGS="$ARGS -DENABLE_VIDEO=OFF -DENABLE_WEB_AUDIO=OFF"
-          ARGS="$ARGS -DENABLE_SPEECH_SYNTHESIS=OFF -DENABLE_MHTML=OFF"
-          ARGS="$ARGS -DENABLE_PDFJS=OFF -DENABLE_XSLT=OFF -DENABLE_JOURNALD_LOG=OFF"
-          ARGS="$ARGS -DENABLE_WEBDRIVER=OFF -DENABLE_DEVELOPER_MODE=OFF"
-          ARGS="$ARGS -DENABLE_EXPERIMENTAL_FEATURES=OFF -DENABLE_API_TESTS=OFF"
-          ARGS="$ARGS -DENABLE_INTROSPECTION=OFF -DUSE_GSTREAMER=OFF"
-          # PORT/Configuration are what build-webkit normally supplies; calling
-          # cmake directly means passing them explicitly.
-          CMAKE_ARGS="-DPORT=GTK -DCMAKE_BUILD_TYPE=Release"
-          CMAKE_ARGS="$CMAKE_ARGS $ARGS"
-          # Suppress the clang -Werror categories that only fire on a newer
-          # clang than ubuntu-24.04 ships.
-          CXXFLAGS="-Wno-error=ignored-attributes -Wno-error=pass-failed"
-          export CXXFLAGS
-          printf '%s\n' "$CMAKE_ARGS" > /tmp/wkb-cmake-args
+          # A real argv array from the start. Rounding this through a string
+          # and word-splitting it destroys any -D value containing a space,
+          # which is exactly how the clang warning flags were silently lost.
+          ARGV=(-S src/WebKit -B src/WebKit/webkit-build -G Ninja
+                -DPORT=GTK
+                -DCMAKE_BUILD_TYPE=Release
+                -DCMAKE_C_COMPILER=clang
+                -DCMAKE_CXX_COMPILER=clang++
+                -DCMAKE_C_FLAGS=-Wno-error=ignored-attributes
+                "-DCMAKE_CXX_FLAGS=-Wno-error=ignored-attributes -Wno-error=pass-failed"
+                -DENABLE_WEB_RTC=OFF
+                -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF
+                -DENABLE_WEBXR_HANDS=OFF -DENABLE_WEBXR_HIT_TEST=OFF
+                -DENABLE_WEBXR_LAYERS=OFF
+                -DENABLE_GAMEPAD=OFF -DENABLE_MEDIA_STREAM=OFF
+                -DENABLE_WEB_CODECS=OFF -DENABLE_VIDEO=OFF -DENABLE_WEB_AUDIO=OFF
+                -DENABLE_SPEECH_SYNTHESIS=OFF -DENABLE_MHTML=OFF
+                -DENABLE_PDFJS=OFF -DENABLE_XSLT=OFF -DENABLE_JOURNALD_LOG=OFF
+                -DENABLE_WEBDRIVER=OFF -DENABLE_DEVELOPER_MODE=OFF
+                -DENABLE_EXPERIMENTAL_FEATURES=OFF -DENABLE_API_TESTS=OFF
+                -DENABLE_INTROSPECTION=OFF
+                -DUSE_GSTREAMER=OFF)
+          # Append flags discovered by the dependency retry loop.
+          EXTRA=()
+
 
           for ATTEMPT in 1 2 3 4 5 6 7 8; do
             echo "===== configure attempt $ATTEMPT ====="
@@ -140,17 +140,14 @@ jobs:
             # follows configure with a full build (JavaScriptCore alone is ~2564
             # targets), so a dependency retry loop around it either hangs for
             # hours or gets killed mid-compile. cmake configures and exits.
-            BUILDDIR=src/WebKit/webkit-build
-            mkdir -p "$BUILDDIR"
             rc=0
             # `cmd || rc=$?` rather than `if cmd; then ...; fi; rc=$?`: the
             # latter captures the compound's status, which is 0 whenever no
             # else branch ran, silently losing the timeout code.
-            timeout 900 cmake -S src/WebKit -B "$BUILDDIR" -G Ninja \
-                 $CMAKE_ARGS > /tmp/wkb-configure.log 2>&1 || rc=$?
+            timeout 900 cmake "${ARGV[@]}" "${EXTRA[@]}" \
+                > /tmp/wkb-configure.log 2>&1 || rc=$?
             if [ $rc -eq 0 ]; then
               echo "CONFIGURE_OK"
-              printf '%s' "$CMAKE_ARGS" > /tmp/wkb-final-args
               exit 0
             fi
             MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log \
@@ -175,11 +172,11 @@ jobs:
               LibBacktrace)
                 # Not packaged on Ubuntu or Debian; only powers Release-build
                 # stack traces, so turn the feature off instead.
-                CMAKE_ARGS="$CMAKE_ARGS -DUSE_LIBBACKTRACE=OFF" ;;
+                EXTRA+=(-DUSE_LIBBACKTRACE=OFF) ;;
               Libseccomp|bubblewrap|Bubblewrap)
                 # No multi-tenant threat model in a single-user headless
                 # scraper, so the process sandbox is unnecessary weight.
-                CMAKE_ARGS="$CMAKE_ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF" ;;
+                EXTRA+=(-DENABLE_BUBBLEWRAP_SANDBOX=OFF) ;;
               Unifdef)         PKG=unifdef ;;
               Gettext|gettext)  PKG=gettext ;;
               Bison)           PKG=bison ;;
