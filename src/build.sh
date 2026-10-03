@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
 cd "$ROOT"
+# dist/ is gitignored, so a fresh clone has no output directory.
+mkdir -p dist
 
 CFLAGS=$(pkg-config --cflags webkit2gtk-4.1)
 LIBS=$(pkg-config --libs webkit2gtk-4.1)
