@@ -21,7 +21,7 @@ VOLATILE = {
 
 PROFILE_MANAGED = {          # set by the profile, asserted separately
     "ua", "cores", "platform", "screen", "colorDepth", "dpr",
-    "webdriver", "notif", "webgl",
+    "automationFlag", "notif", "webgl",
 }
 
 # Fields whose value legitimately depends on the machine the browser runs on,

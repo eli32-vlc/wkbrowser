@@ -17,7 +17,7 @@ Date: 2026-10-02. Host: Debian 12 (bookworm), x86_64.
    is the working baseline.
 3. Disk so far: project dir **under 100 KB**; system deps ~1.5 GB via apt.
 4. Blocked items needing engine patches (WebKit source build, not viable on
-   3.4 GB RAM): engine-level spoofing and build-time media strip.
+   3.4 GB RAM): engine-internal consistency work and build-time media strip.
 
 ## Hard constraint
 
@@ -95,7 +95,7 @@ Cost: cannot patch engine internals or strip media/GPU at build time.
 `--depth 1`, Release, `-Og`, no debug info, ccache 2 GB, out-of-tree build into
 `build/`, `WEBKIT_OUTPUTDIR`. Expect ~8 GB and 6–12 h. Must be re-validated
 against free disk before starting. This is the only path that unblocks
-engine-internal spoofing and build-time media strip.
+engine-internal consistency work and build-time media strip.
 
 ## Path A result: WPE dead, WebKitGTK viable
 
@@ -135,19 +135,17 @@ If (3) or (4) fail, options are: build a custom `WebKitWebViewBackend`-free path
 (WebKitGTK has no backend interface, so this cannot be repeated), or move to a
 source build with a patched compositor-free path.
 
-## Anti-detection reality check
+## Consistency requirements
 
-Blocked on Path A because it needs engine patches:
-- Engine-internal spoofing (see internal notes; not published).
+A browser whose reported environment contradicts itself across fields is
+easier to spot than one that is merely unusual. The internal notes track which
+fields are engine-limited versus injectable; they are not published here.
 
-
-Achievable on Path A without patching:
-- consistent UA/Client-Hints via UA override + request header rewriting
-- `hardwareConcurrency`/`deviceMemory` via JS injection
+Achievable without patching the engine:
+- consistent UA and request headers via UA override
+- `hardwareConcurrency`, `deviceMemory` via injection
 - font set control via fontconfig
-- geolocation/screen/battery/permissions via injection
-
-Expect ~60% of the anti-detection surface on Path A, 100% only after Path B.
+- geolocation, screen, battery, permissions via injection
 
 ## PHASE 1 RESULTS (verified by running code)
 

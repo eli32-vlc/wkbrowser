@@ -13,7 +13,7 @@ static const char* s_probe =
 "JSON.stringify({"
   "  ua: navigator.userAgent,"
   "  uaData: typeof navigator.userAgentData,"
-  "  webdriver: navigator.webdriver,"
+  "  automationFlag: navigator.webdriver,"
   "  cores: navigator.hardwareConcurrency,"
   "  memory: navigator.deviceMemory,"
   "  platform: navigator.platform,"

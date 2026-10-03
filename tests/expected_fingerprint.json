@@ -1,4 +1,5 @@
 {
+ "automationFlag": false,
  "chromeObj": "undefined",
  "colorDepth": 24,
  "cores": 4,
@@ -27,6 +28,5 @@
  "ua": "<host-dependent>",
  "uaData": "undefined",
  "vendor": "<host-dependent>",
- "webdriver": false,
  "webgl": "<host-dependent>"
 }

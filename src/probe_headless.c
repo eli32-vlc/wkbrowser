@@ -15,7 +15,7 @@ static const char* g_url = NULL;
 static const char* script =
     "document.title + '|h1=' + (document.querySelector('h1')||{textContent:'none'}).textContent"
     " + '|ua=' + navigator.userAgent"
-    " + '|wd=' + navigator.webdriver"
+    " + " + navigator.webdriver
     " + '|hw=' + navigator.hardwareConcurrency"
     " + '|win=' + window.innerWidth + 'x' + window.innerHeight";
 
