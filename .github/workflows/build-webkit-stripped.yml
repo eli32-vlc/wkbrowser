@@ -29,7 +29,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 355
 
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
           restore-keys: webkit-stripped-
 
       - name: Auto-install any missing optional libraries
-        timeout-minutes: 90
+        timeout-minutes: 45
         # Rather than burn a full runner per unknown optional dep, probe
         # configure and retry, installing whatever CMake just complained about.
         run: |
@@ -129,7 +129,11 @@ jobs:
             # `cmd || rc=$?` rather than `if cmd; then ...; fi; rc=$?`: the
             # latter captures the compound's status, which is 0 whenever no
             # else branch ran, silently losing the timeout code.
+            # --generate-project-only runs cmake WITHOUT building. Without
+            # it build-webkit compiles JavaScriptCore during configure, which
+            # is a multi-hour job that the retry loop would kill repeatedly.
             timeout 900 Tools/Scripts/build-webkit --release --gtk --only-webkit \
+                 --generate-project-only \
                  --cmakeargs="$ARGS" > /tmp/wkb-configure.log 2>&1 || rc=$?
             if [ $rc -eq 0 ]; then
               echo "CONFIGURE_OK"
@@ -263,10 +267,13 @@ jobs:
           set -o pipefail
           cd src/WebKit
           export CCACHE_DIR=${{ github.workspace }}/build/ccache
-          # build-webkit configures in-tree at WebKitBuild/<port>/<config>.
-          # WEBKIT_OUTPUTDIR is NOT honoured for the configure location.
-          # -l caps load so the 16 GB runner does not OOM on link steps.
-          ninja -C WebKitBuild/GTK/Release -j2 -l3.0 2>&1 | tee build.log | tail -30
+          # Where the configure step actually put the build files.
+          CFG_DIR=$(dirname "$(find . -name CMakeCache.txt -maxdepth 4 | head -1)")
+          echo "building in: $CFG_DIR"
+          # WebKit is ~2564 targets. At -j2 a full Release build is 6-8 hours,
+          # which exceeds the job budget; -j3 with a load cap of 2.5 fits the
+          # 4-core / 16 GB runner and lands near 4-5 hours.
+          ninja -C "$CFG_DIR" -j3 -l2.5 2>&1 | tee build.log | tail -40
 
       - name: Verify media is actually gone (not stubbed)
         run: |
