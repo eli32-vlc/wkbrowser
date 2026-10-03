@@ -72,6 +72,7 @@ jobs:
             libgcrypt20-dev libssl-dev libicu-dev libwoff-dev libjansson-dev \
             libwebp-dev libavif-dev libjpeg-dev libopenjp2-7-dev libtiff-dev \
             unifdef gettext \
+            libglib2.0-dev libgtk-4-dev pkg-config \
             libjxl-dev libwebpdemux2 libsharpyuv-dev libheif-dev \
             libsecret-1-dev libnotify-dev libjsoncpp-dev libtasn1-6-dev \
             libsoup-3.0-dev libpsl-dev libsqlite3-dev \
