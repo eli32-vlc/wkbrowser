@@ -327,31 +327,76 @@ jobs:
           echo "OK: verification passed"
 
       - name: Measure RSS delta
+        # This step used to exit 0 when it could not find a MiniBrowser,
+        # reporting success while measuring nothing. It now fails loudly.
         run: |
           set -uo pipefail
-          RELEASEDIR=src/WebKit/webkit-build/GTK/Release
-          if [ ! -d "$RELEASEDIR" ]; then
-            echo "no $RELEASEDIR; skipping RSS measurement"
-            exit 0
+          BUILDDIR=src/WebKit/webkit-build
+          LIB=$(find "$BUILDDIR" -name 'libwebkitgtk-*.so.*' -type f | head -1)
+          if [ -z "$LIB" ]; then
+            echo "FAIL: no libwebkitgtk to measure"; exit 1
           fi
-          echo "Baseline to compare against: 414 MB unstripped"
-          if [ -f "$RELEASEDIR/bin/MiniBrowser" ] || [ -f "$RELEASEDIR/Programs/MiniBrowser" ]; then
-            MB=$(find "$RELEASEDIR" -name 'MiniBrowser' -type f | head -1)
-            echo "launching $MB under xvfb with software GL to sample RSS"
-            LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
-              xvfb-run -a -s '-screen 0 1280x800x24' \
-              timeout 30 "$MB" "data:text/html,<h1>ci</h1>" &
-            BGPID=$!
-            PEAK=0
-            for _ in $(seq 1 20); do
-              sleep 1
-              T=$(ps -eo rss,args | grep -iE '[M]iniBrowser|[W]ebKit' | awk '{s+=$1} END {print s+0}')
-              [ "${T:-0}" -gt "$PEAK" ] && PEAK=$T
-            done
-            kill $BGPID 2>/dev/null || true
-            echo "PEAK RSS: $((PEAK/1024)) MB (baseline 414 MB)"
+          LIBDIR=$(dirname "$LIB")
+          echo "library: $LIB"
+          echo "baseline to compare against: 414 MB (unstripped Debian build)"
+          echo
+
+          # Build the embedder against the freshly built stripped library and
+          # load a real page, so the figure reflects the stripped engine.
+          if [ ! -f "$BUILDDIR/gtk4/pkgconfig/webkitgtk-6.0.pc" ] \
+             && [ ! -f "$BUILDDIR/pkgconfig/webkitgtk-6.0.pc" ]; then
+            echo "pkg-config file not found; listing what was produced:"
+            find "$BUILDDIR" -maxdepth 3 -name '*.pc' | head
+          fi
+
+          PCC=$(find "$BUILDDIR" -name 'webkitgtk-6.0.pc' | head -1)
+          if [ -n "$PCC" ]; then
+            export PKG_CONFIG_PATH="$(dirname "$PCC"):$PKG_CONFIG_PATH"
+            if gcc -O2 -o dist/wkb-ci src/wkbrowser.c src/wkb_profile.c \
+                   src/wkb_files.c src/wkb_net.c src/wkb_probe.c \
+                   $(pkg-config --cflags webkitgtk-6.0) \
+                   $(pkg-config --libs webkitgtk-6.0) 2>build-embedder.log; then
+              echo "embedder built against the stripped library"
+              export LD_LIBRARY_PATH="$LIBDIR:$LD_LIBRARY_PATH"
+              PEAK=0
+              LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+                xvfb-run -a -s '-screen 0 1280x800x24' \
+                timeout 40 ./dist/wkb-ci --url "data:text/html,<h1>rss</h1>" \
+                --probe --no-blocklist --timeout 20 > probe-ci.log 2>&1 &
+              BGPID=$!
+              for _ in $(seq 1 25); do
+                sleep 1
+                T=$(ps -eo rss,args | grep -E '[w]kb-ci|[W]ebKit' \
+                      | awk '{s+=$1} END {print s+0}')
+                [ "${T:-0}" -gt "$PEAK" ] && PEAK=$T
+              done
+              kill $BGPID 2>/dev/null
+              wait $BGPID 2>/dev/null
+              echo
+              echo "=== PROBE AGAINST STRIPPED BUILD ==="
+              grep -E '^\{' probe-ci.log | head -1
+              echo
+              echo "PEAK RSS: $((PEAK/1024)) MB   (baseline 414 MB unstripped)"
+              if [ "$PEAK" -eq 0 ]; then
+                echo "FAIL: measured 0 KB, the probe did not run"
+                tail -20 probe-ci.log
+                exit 1
+              fi
+              {
+                echo "stripped_peak_rss_mb=$((PEAK/1024))"
+                echo "unstripped_baseline_mb=414"
+                echo "library_size=$(du -h "$LIB" | cut -f1)"
+                echo "gstreamer=absent"
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "embedder failed to build against the stripped library:"
+              tail -20 build-embedder.log
+              exit 1
+            fi
           else
-            echo "MiniBrowser not found in $RELEASEDIR; library-only build verified"
+            echo "FAIL: webkitgtk-6.0.pc not produced, cannot measure"
+            find "$BUILDDIR" -maxdepth 3 -name '*.pc' | head
+            exit 1
           fi
 
       - name: Upload artifact
