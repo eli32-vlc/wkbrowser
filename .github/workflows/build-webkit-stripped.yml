@@ -248,8 +248,17 @@ jobs:
         # stripping actually took effect instead of trusting exit status.
         run: |
           set -euo pipefail
-          CFG=src/WebKit/WebKitBuild/GTK/Release/CMakeCache.txt
-          test -f "$CFG" || { echo "FAIL: no CMakeCache at $CFG";             find src/WebKit -maxdepth 3 -name CMakeCache.txt; exit 1; }
+          # Discover the cache rather than hardcoding a path: with
+          # --generate-project-only the location differs from the old
+          # WebKitBuild/GTK/Release assumption.
+          CFG=$(find src/WebKit -maxdepth 4 -name CMakeCache.txt | head -1)
+          if [ -z "$CFG" ]; then
+            echo "FAIL: no CMakeCache found under src/WebKit"
+            find src/WebKit -maxdepth 4 \( -name CMakeCache.txt -o -name build.ninja \) | head
+            exit 1
+          fi
+          echo "cache: $CFG"
+          echo "build dir: $(dirname "$CFG")"
           echo "--- resolved strip flags ---"
           for K in USE_GSTREAMER ENABLE_WEB_RTC ENABLE_MEDIA_STREAM \
                    ENABLE_WEB_CODECS ENABLE_VIDEO ENABLE_GAMEPAD \
