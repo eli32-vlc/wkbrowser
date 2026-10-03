@@ -153,15 +153,14 @@ jobs:
             MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log \
                       | head -1 | awk '{print $4}')
             if [ $rc -eq 124 ]; then
-              echo "configure attempt $ATTEMPT TIMED OUT after 900s; skipping to next" \
-                | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "configure attempt $ATTEMPT TIMED OUT after 900s; skipping to next"
               # A failed configure leaves a partial cache behind; clear it so
               # the next attempt starts clean rather than inheriting bad state.
               rm -rf src/WebKit/webkit-build/CMakeCache.txt
               rm -rf src/WebKit/webkit-build/CMakeFiles
               continue
             fi
-            echo "configure asked for: ${MISSING:-<none parsed>}" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "configure asked for: ${MISSING:-<none parsed>}" >> "$GITHUB_STEP_SUMMARY"
             if [ -z "$MISSING" ]; then
               echo "configure failed for a reason other than a missing library"
               tail -40 /tmp/wkb-configure.log
