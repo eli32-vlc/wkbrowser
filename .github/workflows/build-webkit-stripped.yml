@@ -89,7 +89,7 @@ jobs:
         with:
           path: |
             build/ccache
-            src/WebKit/WebKitBuild
+            src/WebKit/webkit-build
           key: webkit-stripped-${{ hashFiles('.github/workflows/build-webkit-stripped.yml') }}
           restore-keys: webkit-stripped-
 
@@ -104,7 +104,7 @@ jobs:
           # rather than -D: build-webkit word-splits --cmakeargs, which would
           # orphan any flag containing a space.
           export CXXFLAGS="-Wno-error=ignored-attributes -Wno-error=pass-failed"
-          ARGS="-GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
+          ARGS="-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE=-O1"
           ARGS="$ARGS -DENABLE_WEB_RTC=OFF -DENABLE_WEBXR=OFF -DENABLE_WEBXR_AR=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_HANDS=OFF -DENABLE_WEBXR_HIT_TEST=OFF"
           ARGS="$ARGS -DENABLE_WEBXR_LAYERS=OFF -DENABLE_GAMEPAD=OFF"
@@ -115,6 +115,15 @@ jobs:
           ARGS="$ARGS -DENABLE_WEBDRIVER=OFF -DENABLE_DEVELOPER_MODE=OFF"
           ARGS="$ARGS -DENABLE_EXPERIMENTAL_FEATURES=OFF -DENABLE_API_TESTS=OFF"
           ARGS="$ARGS -DENABLE_INTROSPECTION=OFF -DUSE_GSTREAMER=OFF"
+          # PORT/Configuration are what build-webkit normally supplies; calling
+          # cmake directly means passing them explicitly.
+          CMAKE_ARGS="-DPORT=GTK -DCMAKE_BUILD_TYPE=Release"
+          CMAKE_ARGS="$CMAKE_ARGS $ARGS"
+          # Suppress the clang -Werror categories that only fire on a newer
+          # clang than ubuntu-24.04 ships.
+          CXXFLAGS="-Wno-error=ignored-attributes -Wno-error=pass-failed"
+          export CXXFLAGS
+          printf '%s\n' "$CMAKE_ARGS" > /tmp/wkb-cmake-args
 
           for ATTEMPT in 1 2 3 4 5 6 7 8; do
             echo "===== configure attempt $ATTEMPT ====="
@@ -125,19 +134,21 @@ jobs:
             # Hard bound per attempt. A previous run hung here for 100 minutes
             # with no output at all, which is worse than failing: it ate the
             # entire job budget and told us nothing.
+            # Run cmake directly rather than build-webkit. build-webkit always
+            # follows configure with a full build (JavaScriptCore alone is ~2564
+            # targets), so a dependency retry loop around it either hangs for
+            # hours or gets killed mid-compile. cmake configures and exits.
+            BUILDDIR=src/WebKit/webkit-build
+            mkdir -p "$BUILDDIR"
             rc=0
             # `cmd || rc=$?` rather than `if cmd; then ...; fi; rc=$?`: the
             # latter captures the compound's status, which is 0 whenever no
             # else branch ran, silently losing the timeout code.
-            # --generate-project-only runs cmake WITHOUT building. Without
-            # it build-webkit compiles JavaScriptCore during configure, which
-            # is a multi-hour job that the retry loop would kill repeatedly.
-            timeout 900 Tools/Scripts/build-webkit --release --gtk --only-webkit \
-                 --generate-project-only \
-                 --cmakeargs="$ARGS" > /tmp/wkb-configure.log 2>&1 || rc=$?
+            timeout 900 cmake -S src/WebKit -B "$BUILDDIR" -G Ninja \
+                 $CMAKE_ARGS > /tmp/wkb-configure.log 2>&1 || rc=$?
             if [ $rc -eq 0 ]; then
               echo "CONFIGURE_OK"
-              printf '%s' "$ARGS" > /tmp/wkb-final-args
+              printf '%s' "$CMAKE_ARGS" > /tmp/wkb-final-args
               exit 0
             fi
             MISSING=$(grep -oE 'Could NOT find [A-Za-z0-9_]+' /tmp/wkb-configure.log \
@@ -145,9 +156,10 @@ jobs:
             if [ $rc -eq 124 ]; then
               echo "configure attempt $ATTEMPT TIMED OUT after 900s; skipping to next" \
                 | tee -a "$GITHUB_STEP_SUMMARY"
-              # A hang is usually a stale cache from the previous attempt.
-              rm -f src/WebKit/WebKitBuild/CMakeCache.txt
-              rm -rf src/WebKit/WebKitBuild/CMakeFiles
+              # A failed configure leaves a partial cache behind; clear it so
+              # the next attempt starts clean rather than inheriting bad state.
+              rm -rf src/WebKit/webkit-build/CMakeCache.txt
+              rm -rf src/WebKit/webkit-build/CMakeFiles
               continue
             fi
             echo "configure asked for: ${MISSING:-<none parsed>}" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -161,11 +173,11 @@ jobs:
               LibBacktrace)
                 # Not packaged on Ubuntu or Debian; only powers Release-build
                 # stack traces, so turn the feature off instead.
-                ARGS="$ARGS -DUSE_LIBBACKTRACE=OFF" ;;
+                CMAKE_ARGS="$CMAKE_ARGS -DUSE_LIBBACKTRACE=OFF" ;;
               Libseccomp|bubblewrap|Bubblewrap)
                 # No multi-tenant threat model in a single-user headless
                 # scraper, so the process sandbox is unnecessary weight.
-                ARGS="$ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF" ;;
+                CMAKE_ARGS="$CMAKE_ARGS -DENABLE_BUBBLEWRAP_SANDBOX=OFF" ;;
               Unifdef)         PKG=unifdef ;;
               Gettext|gettext)  PKG=gettext ;;
               Bison)           PKG=bison ;;
@@ -277,7 +289,8 @@ jobs:
           cd src/WebKit
           export CCACHE_DIR=${{ github.workspace }}/build/ccache
           # Where the configure step actually put the build files.
-          CFG_DIR=$(dirname "$(find . -name CMakeCache.txt -maxdepth 4 | head -1)")
+          CFG_DIR=webkit-build
+          test -f "$CFG_DIR/CMakeCache.txt" || { echo "FAIL: no CMakeCache in $CFG_DIR"; exit 1; }
           echo "building in: $CFG_DIR"
           # WebKit is ~2564 targets. At -j2 a full Release build is 6-8 hours,
           # which exceeds the job budget; -j3 with a load cap of 2.5 fits the
@@ -287,11 +300,11 @@ jobs:
       - name: Verify media is actually gone (not stubbed)
         run: |
           set -euo pipefail
-          LIB=$(find src/WebKit/WebKitBuild -name 'libwebkitgtk-*.so.*' -type f | head -1)
+          LIB=$(find src/WebKit/webkit-build -name 'libwebkitgtk-*.so.*' -type f | head -1)
           if [ -z "$LIB" ]; then
-            echo "FAIL: no libwebkitgtk shared object found under src/WebKit/WebKitBuild"
+            echo "FAIL: no libwebkitgtk shared object found under src/WebKit/webkit-build"
             echo "--- what was actually built ---"
-            find src/WebKit/WebKitBuild -name '*.so*' -type f | head -20
+            find src/WebKit/webkit-build -name '*.so*' -type f | head -20
             exit 1
           fi
           echo "lib: $LIB"
@@ -304,14 +317,14 @@ jobs:
           echo "--- library size ---"
           ls -lh "$LIB"
           echo "--- total build dir size (10 GB cap) ---"
-          du -sh src/WebKit/WebKitBuild src/WebKit
+          du -sh src/WebKit/webkit-build src/WebKit
           df -h /
           echo "OK: verification passed"
 
       - name: Measure RSS delta
         run: |
           set -uo pipefail
-          RELEASEDIR=src/WebKit/WebKitBuild/GTK/Release
+          RELEASEDIR=src/WebKit/webkit-build/GTK/Release
           if [ ! -d "$RELEASEDIR" ]; then
             echo "no $RELEASEDIR; skipping RSS measurement"
             exit 0
@@ -342,6 +355,6 @@ jobs:
         with:
           name: webkitgtk-stripped
           path: |
-            src/WebKit/WebKitBuild/GTK/Release/lib/
-            src/WebKit/WebKitBuild/GTK/Release/bin/
+            src/WebKit/webkit-build/GTK/Release/lib/
+            src/WebKit/webkit-build/GTK/Release/bin/
           retention-days: 30
