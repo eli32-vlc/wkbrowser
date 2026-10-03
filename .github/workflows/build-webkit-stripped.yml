@@ -45,10 +45,17 @@ jobs:
         run: |
           # Pinned so a failure is reproducible. Bump deliberately rather
           # than tracking main, which moves under you mid-build.
+          #
+          # PIN RATIONALE: this commit predates 2026-09-01, the day
+          # Source/WebKit/Shared/RunJavaScriptResult.swift landed. That file
+          # imports JavaScriptCore_Private.Cxx.* modules which exist only in
+          # WebKit's own Swift toolchain, and the build cannot complete on a
+          # stock runner. The interop imports were confirmed absent from
+          # every Swift file that failed at the newer pin.
           git clone --depth 1 https://github.com/WebKit/WebKit.git src/WebKit
           cd src/WebKit
-          git fetch --depth 1 origin 677d4d7c6bf8abd9367fbd7b46f349226f4a90e9
-          git checkout 677d4d7c6bf8abd9367fbd7b46f349226f4a90e9
+          git fetch --depth 1 origin 48985e195c6fddb7395ad65e72a7614f12366ae2
+          git checkout 48985e195c6fddb7395ad65e72a7614f12366ae2
           cd ../..
           du -sh src/WebKit
 
