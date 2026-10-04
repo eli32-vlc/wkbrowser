@@ -352,6 +352,13 @@ jobs:
           fi
 
           PCC=$(find "$BUILDDIR" -name 'webkitgtk-6.0.pc' | head -1)
+          # Every generated .pc sits in its own build subdirectory, and
+          # webkitgtk-6.0.pc Requires javascriptcoregtk-6.0 from a different
+          # one. Adding only webkit's directory yields:
+          #   Package 'javascriptcoregtk-6.0', required by 'webkitgtk-6.0',
+          #   not found
+          # so collect all of them. Assigned before PKG_CONFIG_PATH uses it.
+          PC_PATH=$(find "$BUILDDIR" -name '*.pc' -printf '%h\n' | sort -u | paste -sd: -)
           if [ -n "$PCC" ]; then
             # Prepend, never replace: WebKit's .pc resolves its Requires
             # through pkg-config, so clobbering PKG_CONFIG_PATH hides the
